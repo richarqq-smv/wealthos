@@ -1,19 +1,25 @@
 import { useEffect, useState } from "react";
-import type { Investment } from "@/types/models";
+import type { Account, Investment } from "@/types/models";
 import { MarketDataService } from "@/services/market/MarketDataService";
 import { buildFxLookup, type FxRateLookup } from "@/lib/marketData/currencyConversion";
 
 /**
  * Cache-first FX lookup for whatever foreign currencies the portfolio
- * actually holds. Same-currency portfolios (the common case, and all demo
- * data) never touch the network — `convertAmountMinor` short-circuits
- * before this lookup is even consulted.
+ * actually holds — investments (priced via live data) and accounts (a
+ * currency only reachable today via import, since "add account" always
+ * creates EUR accounts) alike. Same-currency portfolios (the common case,
+ * and all demo data) never touch the network — `convertAmountMinor`
+ * short-circuits before this lookup is even consulted.
  */
-export function useFxLookup(investments: Investment[], baseCurrency: string): FxRateLookup {
+export function useFxLookup(investments: Investment[], accounts: Account[], baseCurrency: string): FxRateLookup {
   const [rates, setRates] = useState<Record<string, number>>({});
 
   const foreignCurrencies = Array.from(
-    new Set(investments.map((inv) => inv.currency).filter((currency) => currency !== baseCurrency))
+    new Set(
+      [...investments.map((inv) => inv.currency), ...accounts.map((acc) => acc.currency)].filter(
+        (currency) => currency !== baseCurrency
+      )
+    )
   ).sort();
   const key = foreignCurrencies.join(",");
 

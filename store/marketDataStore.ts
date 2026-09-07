@@ -31,6 +31,19 @@ async function applyQuoteToInvestments(quote: MarketQuote): Promise<void> {
   }
 }
 
+/**
+ * Per-instrument in-flight tracker for `refreshOne` (module-level, not part
+ * of Zustand state — nothing in the UI needs to render off it). `refreshAll`
+ * already has its own `isRefreshing` guard, but that flag is never set by
+ * `refreshOne`, so without this a rapid double-click of the investment-detail
+ * refresh button — or a manual refresh landing next to an auto-refresh tick —
+ * could fire two concurrent requests for the same symbol. Keyed by instrument
+ * (`symbol@exchange`), not by investment id, so two different instruments can
+ * still refresh at the same time; always cleared in `finally` so a thrown
+ * error can never leave an instrument permanently locked out.
+ */
+const inFlightInstrumentRefreshes = new Set<string>();
+
 interface MarketDataState {
   quotesBySymbol: Record<string, MarketQuote>;
   isRefreshing: boolean;
@@ -57,23 +70,34 @@ export const useMarketDataStore = create<MarketDataState>((set, get) => ({
       const result = await MarketDataService.refreshQuotes(investments);
       const quotes = await MarketDataCacheRepository.getAllQuotes();
       set({ quotesBySymbol: quotes, lastError: result.error ?? null });
-      await Promise.all(Object.values(quotes).map(applyQuoteToInvestments));
+      // Only re-apply the quotes actually fetched this cycle, not the entire
+      // cache — investments whose cache entry was already fresh (and thus
+      // skipped by refreshQuotes) don't need a redundant AsyncStorage write.
+      await Promise.all(result.quotes.map(applyQuoteToInvestments));
     } finally {
       set({ isRefreshing: false });
     }
   },
 
   refreshOne: async (investment) => {
-    const result = await MarketDataService.getQuote(investment);
-    if (result.quote) {
-      set((state) => ({
-        quotesBySymbol: {
-          ...state.quotesBySymbol,
-          [marketDataInstrumentKey(result.quote!.providerSymbol, result.quote!.exchange)]: result.quote!,
-        },
-      }));
-      await applyQuoteToInvestments(result.quote);
+    const instrumentKey = marketDataInstrumentKey(investment.providerSymbol ?? investment.id, investment.exchange);
+    if (inFlightInstrumentRefreshes.has(instrumentKey)) return;
+
+    inFlightInstrumentRefreshes.add(instrumentKey);
+    try {
+      const result = await MarketDataService.getQuote(investment);
+      if (result.quote) {
+        set((state) => ({
+          quotesBySymbol: {
+            ...state.quotesBySymbol,
+            [marketDataInstrumentKey(result.quote!.providerSymbol, result.quote!.exchange)]: result.quote!,
+          },
+        }));
+        await applyQuoteToInvestments(result.quote);
+      }
+      if (result.error) set({ lastError: result.error });
+    } finally {
+      inFlightInstrumentRefreshes.delete(instrumentKey);
     }
-    if (result.error) set({ lastError: result.error });
   },
 }));

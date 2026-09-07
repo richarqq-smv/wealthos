@@ -96,7 +96,9 @@ class MarketDataServiceImpl {
   }
 
   /** Batched refresh for the whole portfolio — one HTTP call for every stale symbol, per rule #28. */
-  async refreshQuotes(investments: Investment[]): Promise<{ updated: number; error?: MarketDataErrorKind }> {
+  async refreshQuotes(
+    investments: Investment[]
+  ): Promise<{ updated: number; quotes: MarketQuote[]; error?: MarketDataErrorKind }> {
     const tracked = investments.filter((inv) => inv.liveDataEnabled && inv.providerSymbol);
     const toRefresh: Array<{ providerSymbol: string; assetType: MarketAssetType; exchange?: string }> = [];
     const seen = new Set<string>();
@@ -113,20 +115,20 @@ class MarketDataServiceImpl {
       }
     }
 
-    if (toRefresh.length === 0) return { updated: 0 };
+    if (toRefresh.length === 0) return { updated: 0, quotes: [] };
 
     const apiKey = await getApiKey("twelveData");
-    if (!apiKey || isBackedOff("twelveData")) return { updated: 0 };
+    if (!apiKey || isBackedOff("twelveData")) return { updated: 0, quotes: [] };
 
     try {
       const quotes = await TwelveDataProvider.getQuotesBatch!(toRefresh, apiKey);
       for (const quote of quotes) {
         await MarketDataCacheRepository.setQuote(quote);
       }
-      return { updated: quotes.length };
+      return { updated: quotes.length, quotes };
     } catch (error) {
       registerResult("twelveData", error);
-      return { updated: 0, error: error instanceof MarketDataError ? error.kind : "unknown" };
+      return { updated: 0, quotes: [], error: error instanceof MarketDataError ? error.kind : "unknown" };
     }
   }
 

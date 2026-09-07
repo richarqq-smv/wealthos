@@ -1,7 +1,20 @@
 import { z } from "zod";
 
 const dataOrigin = z.enum(["demo", "manual", "synced"]);
-const isoDate = z.string().min(1);
+/**
+ * Non-empty AND semantically a real, parseable date (accepts both date-only
+ * `"2026-01-01"` and full ISO timestamp `"2026-01-01T12:30:00.000Z"` forms,
+ * matching every format WealthOS itself writes) — a malformed string like
+ * `"not-a-date"` or an out-of-range one like `"2026-99-99"` is rejected at
+ * import time instead of silently becoming `Invalid Date`/`NaN` later in
+ * sorting or display.
+ */
+const isoDate = z
+  .string()
+  .min(1)
+  .refine((value) => !Number.isNaN(new Date(value).getTime()), { message: "Ongeldige datum." });
+/** Plain finite numbers only — `z.number()` alone accepts `Infinity`/`-Infinity` (only `NaN` is rejected by default), and a numeral like `1e999` is valid JSON that overflows to `Infinity` when parsed. No arbitrary upper bound is imposed — only real, legitimate WealthOS amounts must never be blocked. */
+const financialNumber = z.number().finite();
 const currencyCode = z.enum(["EUR", "USD", "GBP", "CHF", "JPY", "CAD", "AUD"]);
 
 const accountSchema = z.object({
@@ -9,7 +22,7 @@ const accountSchema = z.object({
   name: z.string().min(1),
   institution: z.string(),
   type: z.enum(["checking", "savings", "cash", "other"]),
-  balanceMinor: z.number(),
+  balanceMinor: financialNumber,
   currency: currencyCode,
   note: z.string().optional(),
   origin: dataOrigin,
@@ -22,9 +35,9 @@ const investmentSchema = z.object({
   name: z.string().min(1),
   ticker: z.string().min(1),
   type: z.enum(["stock", "etf", "crypto", "fund", "other"]),
-  quantity: z.number().nonnegative(),
-  averagePriceMinor: z.number().nonnegative(),
-  currentPriceMinor: z.number().nonnegative(),
+  quantity: financialNumber.nonnegative(),
+  averagePriceMinor: financialNumber.nonnegative(),
+  currentPriceMinor: financialNumber.nonnegative(),
   currency: currencyCode,
   broker: z.string(),
   purchaseDate: isoDate,
@@ -41,8 +54,8 @@ const investmentTransactionSchema = z.object({
   id: z.string().min(1),
   investmentId: z.string().min(1),
   type: z.enum(["buy", "sell"]),
-  quantity: z.number().positive(),
-  priceMinor: z.number().nonnegative(),
+  quantity: financialNumber.positive(),
+  priceMinor: financialNumber.nonnegative(),
   date: isoDate,
   note: z.string().optional(),
   createdAt: isoDate,
@@ -51,7 +64,7 @@ const investmentTransactionSchema = z.object({
 const transactionSchema = z.object({
   id: z.string().min(1),
   type: z.enum(["income", "expense", "transfer", "investment"]),
-  amountMinor: z.number(),
+  amountMinor: financialNumber,
   description: z.string().min(1),
   category: z.enum([
     "salaris",
@@ -79,7 +92,7 @@ const budgetSchema = z.object({
   id: z.string().min(1),
   category: transactionSchema.shape.category,
   month: z.string().regex(/^\d{4}-\d{2}$/),
-  amountMinor: z.number().nonnegative(),
+  amountMinor: financialNumber.nonnegative(),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -88,8 +101,8 @@ const liabilitySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   type: z.enum(["mortgage", "loan", "creditCard", "other"]),
-  amountMinor: z.number().nonnegative(),
-  interestRate: z.number().optional(),
+  amountMinor: financialNumber.nonnegative(),
+  interestRate: financialNumber.optional(),
   note: z.string().optional(),
   origin: dataOrigin,
   createdAt: isoDate,
@@ -115,7 +128,7 @@ const marketDataSettingsSchema = z.object({
     companyInfo: z.boolean(),
   }),
   autoRefresh: z.boolean(),
-  refreshIntervalMinutes: z.number().positive(),
+  refreshIntervalMinutes: z.number().finite().positive(),
   lastSuccessfulUpdate: isoDate.nullable(),
 });
 

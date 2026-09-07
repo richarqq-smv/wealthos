@@ -7,26 +7,26 @@ import { useFxLookup } from "@/hooks/useFxLookup";
 import {
   calculateNetWorthInBaseCurrency,
   calculatePortfolioValueInBaseCurrency,
-  calculateTotalCash,
+  calculateTotalCashInBaseCurrency,
   calculateTotalLiabilities,
   calculateWealthAllocation,
 } from "@/lib/calculations";
 
 /**
  * Same-currency portfolios (the default, and all demo data) get identical
- * output to plain `calculatePortfolioValue`/`calculateNetWorth` — the FX
- * lookup only changes anything once a live-data position is priced in a
- * currency other than the user's base currency (rule: multi-currency FX).
+ * output to plain `calculatePortfolioValue`/`calculateNetWorth`/`calculateTotalCash`
+ * — the FX lookup only changes anything once a position or account is priced
+ * in a currency other than the user's base currency (rule: multi-currency FX).
  */
 export function useWealthSummary() {
   const accounts = useAccountsStore((s) => s.accounts);
   const investments = useInvestmentsStore((s) => s.investments);
   const liabilities = useLiabilitiesStore((s) => s.liabilities);
   const baseCurrency = useSettingsStore((s) => s.currency);
-  const fxLookup = useFxLookup(investments, baseCurrency);
+  const fxLookup = useFxLookup(investments, accounts, baseCurrency);
 
   return useMemo(() => {
-    const cashMinor = calculateTotalCash(accounts);
+    const cashMinor = calculateTotalCashInBaseCurrency(accounts, baseCurrency, fxLookup);
     const portfolioMinor = calculatePortfolioValueInBaseCurrency(investments, baseCurrency, fxLookup);
     const liabilitiesMinor = calculateTotalLiabilities(liabilities);
     const netWorthMinor = calculateNetWorthInBaseCurrency(accounts, investments, liabilities, baseCurrency, fxLookup);

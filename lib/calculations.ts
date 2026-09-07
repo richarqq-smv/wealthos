@@ -64,6 +64,26 @@ export function calculateInvestedCapitalInBaseCurrency(
   return convertAmountMinor(calculateInvestedCapital(investment), investment.currency, baseCurrency, fxLookup);
 }
 
+/**
+ * FX-aware sibling of `calculateTotalCash`. Accounts (unlike investments
+ * before this fix) were being summed in `calculateTotalAssetsInBaseCurrency`
+ * without ever converting each account's own `currency` — a non-EUR account
+ * (reachable today via import, since the "add account" screen only ever
+ * creates EUR accounts) would silently be treated as if its balance were
+ * already in the base currency. `calculateTotalCash` itself is left
+ * untouched so every existing caller/test keeps its current behavior.
+ */
+export function calculateTotalCashInBaseCurrency(
+  accounts: Account[],
+  baseCurrency: string,
+  fxLookup: FxRateLookup
+): number {
+  return accounts.reduce(
+    (sum, account) => sum + convertAmountMinor(account.balanceMinor, account.currency, baseCurrency, fxLookup),
+    0
+  );
+}
+
 export function calculatePortfolioValueInBaseCurrency(
   investments: Investment[],
   baseCurrency: string,
@@ -92,7 +112,10 @@ export function calculateTotalAssetsInBaseCurrency(
   baseCurrency: string,
   fxLookup: FxRateLookup
 ): number {
-  return calculateTotalCash(accounts) + calculatePortfolioValueInBaseCurrency(investments, baseCurrency, fxLookup);
+  return (
+    calculateTotalCashInBaseCurrency(accounts, baseCurrency, fxLookup) +
+    calculatePortfolioValueInBaseCurrency(investments, baseCurrency, fxLookup)
+  );
 }
 
 export function calculateNetWorthInBaseCurrency(

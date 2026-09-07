@@ -113,6 +113,7 @@ function registerSecureStorageHandlers() {
   const encryptionAvailable = safeStorage.isEncryptionAvailable();
 
   ipcMain.handle("secure-storage:get", (event, key) => {
+    if (typeof key !== "string") return null;
     const store = readSecureStoreFile();
     const encoded = store[key];
     if (!encoded) return null;
@@ -134,10 +135,33 @@ function registerSecureStorageHandlers() {
   });
 
   ipcMain.handle("secure-storage:delete", (event, key) => {
+    if (typeof key !== "string") return false;
     const store = readSecureStoreFile();
     delete store[key];
     writeSecureStoreFile(store);
     return true;
+  });
+}
+
+/**
+ * WealthOS has no feature today that opens an external link or navigates
+ * away from its own origin — but nothing enforced that at the Electron
+ * level either. This denies any `window.open()`/target=_blank popup outright
+ * and blocks in-window navigation to anything other than the app's own
+ * origin, so a future feature (e.g. a clickable company-website field)
+ * can't accidentally hand external content a full, unrestricted
+ * BrowserWindow. Same-origin navigation (the app's own routing) is
+ * untouched — Expo Router's client-side navigation never triggers Electron
+ * `will-navigate` in the first place, since it's in-page History API
+ * routing, not a real page load.
+ */
+function attachNavigationGuard(win, allowedOrigin) {
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+  win.webContents.on("will-navigate", (event, url) => {
+    if (new URL(url).origin !== allowedOrigin) {
+      event.preventDefault();
+    }
   });
 }
 
@@ -163,6 +187,7 @@ function createWindow(startUrl) {
   Menu.setApplicationMenu(null);
   win.loadURL(startUrl);
   attachRendererLogging(win);
+  attachNavigationGuard(win, new URL(startUrl).origin);
 
   return win;
 }

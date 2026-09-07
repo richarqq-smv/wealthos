@@ -80,6 +80,21 @@ class MarketDataCacheRepositoryImpl {
     await writeValue(CACHE_KEY, cache);
   }
 
+  /**
+   * KNOWN LIMITATION (deliberate, not an oversight): keyed by bare `symbol`,
+   * not the exchange-aware `marketDataInstrumentKey` used for quotes/
+   * historical above. Alpha Vantage's `OVERVIEW` endpoint — the sole source
+   * of dividend/company data — has no exchange-disambiguation parameter at
+   * all, so it always resolves a ticker to whichever single listing Alpha
+   * Vantage itself considers primary, regardless of which exchange the
+   * requesting WealthOS investment is actually linked to. Making this cache
+   * exchange-aware would not make the underlying data any more correct
+   * (both keys would end up holding the identical Alpha Vantage response) —
+   * it would only cost extra, redundant free-tier requests for two cache
+   * entries that are already guaranteed to be the same. If Alpha Vantage
+   * ever adds real exchange disambiguation, this should switch to
+   * `marketDataInstrumentKey` to match the quote/historical caches.
+   */
   async getDividend(symbol: string): Promise<DividendInfo | undefined> {
     const cache = await readCache();
     return cache.dividends[symbol];
@@ -91,6 +106,7 @@ class MarketDataCacheRepositoryImpl {
     await writeValue(CACHE_KEY, cache);
   }
 
+  /** See the `getDividend` comment above — same known, deliberate limitation applies here. */
   async getCompanyProfile(symbol: string): Promise<CompanyProfile | undefined> {
     const cache = await readCache();
     return cache.companyProfiles[symbol];

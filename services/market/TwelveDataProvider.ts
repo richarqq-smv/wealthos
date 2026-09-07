@@ -14,6 +14,8 @@ import { toMinorUnits } from "@/utils/money";
 
 const BASE_URL = "https://api.twelvedata.com";
 const REQUEST_TIMEOUT_MS = 10_000;
+/** Free-tier cap is 8 requests/minute; keep a batch's disambiguated-symbol burst safely under that. */
+const MAX_CONCURRENT_DISAMBIGUATED_REQUESTS = 5;
 
 const HISTORICAL_PARAMS: Record<HistoricalPeriod, { interval: string; outputsize: number }> = {
   "1D": { interval: "15min", outputsize: 32 },
@@ -86,7 +88,9 @@ function parseQuoteBody(
   const change = data.change !== undefined ? Number.parseFloat(String(data.change)) : NaN;
   const changePercent = data.percent_change !== undefined ? Number.parseFloat(String(data.percent_change)) : NaN;
 
-  if (Number.isNaN(close)) {
+  // A price is never zero, negative, or non-finite for a real instrument — reject rather
+  // than let a malformed/adversarial response silently corrupt displayed valuations.
+  if (!Number.isFinite(close) || close <= 0) {
     throw new MarketDataError("malformedResponse", "twelveData", "Onverwacht antwoordformaat van Twelve Data.");
   }
 
@@ -140,16 +144,26 @@ export const TwelveDataProvider: MarketDataProviderClient = {
     const disambiguated = symbols.filter((s) => s.exchange);
     const plain = symbols.filter((s) => !s.exchange);
 
-    const disambiguatedResults = await Promise.all(
-      disambiguated.map(async (s) => {
-        try {
-          return await TwelveDataProvider.getQuote!(s.providerSymbol, s.assetType, apiKey, s.exchange);
-        } catch {
-          return null;
-        }
-      })
-    );
-    const quotes: MarketQuote[] = disambiguatedResults.filter((q): q is MarketQuote => q !== null);
+    const quotes: MarketQuote[] = [];
+    // Disambiguated symbols each cost one full API credit and can't be
+    // combined into a single request — firing them all via one unbounded
+    // Promise.all could burst past Twelve Data's free-tier 8 requests/minute
+    // cap in a single refresh cycle. Chunking keeps this simple (no queue,
+    // no cross-request backoff bookkeeping) while staying well under that
+    // cap even when the `plain` batch call below also runs in the same cycle.
+    for (let i = 0; i < disambiguated.length; i += MAX_CONCURRENT_DISAMBIGUATED_REQUESTS) {
+      const chunk = disambiguated.slice(i, i + MAX_CONCURRENT_DISAMBIGUATED_REQUESTS);
+      const chunkResults = await Promise.all(
+        chunk.map(async (s) => {
+          try {
+            return await TwelveDataProvider.getQuote!(s.providerSymbol, s.assetType, apiKey, s.exchange);
+          } catch {
+            return null;
+          }
+        })
+      );
+      quotes.push(...chunkResults.filter((q): q is MarketQuote => q !== null));
+    }
 
     if (plain.length === 1) {
       const only = plain[0]!;
@@ -252,7 +266,9 @@ export const TwelveDataProvider: MarketDataProviderClient = {
 
     const data = body as Record<string, unknown>;
     const rate = Number.parseFloat(String(data.rate ?? ""));
-    if (Number.isNaN(rate)) {
+    // An FX rate is never zero, negative, or non-finite — reject rather than
+    // let a malformed response silently corrupt every converted total.
+    if (!Number.isFinite(rate) || rate <= 0) {
       throw new MarketDataError("malformedResponse", "twelveData", "Geen geldige wisselkoers ontvangen.");
     }
 
