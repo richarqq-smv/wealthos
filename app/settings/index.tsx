@@ -119,7 +119,7 @@ export default function SettingsScreen() {
 
       <SectionCard title="Over">
         <View style={styles.padded}>
-          <Text style={[typography.body, { color: colors.textPrimary }]}>WealthOS 0.4.1</Text>
+          <Text style={[typography.body, { color: colors.textPrimary }]}>WealthOS 0.4.2</Text>
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
             WealthOS is een persoonlijke financiële tracker en geeft geen financieel advies.
           </Text>

@@ -15,10 +15,11 @@ WealthOS is een persoonlijke tracker en geeft geen financieel advies. Het is gee
 - **Budgetten**: per categorie per maand, met voortgangsbalk en status (op schema / let op / bijna op / overschreden).
 - **Schulden**: hypotheek, lening, creditcard — meegenomen in de netto-vermogensberekening.
 - **Analyse**: inkomsten/uitgaven deze maand, netto cashflow, spaarpercentage, uitgavenanalyse per categorie, maandvergelijking.
-- **Instellingen**: thema (licht/donker/systeem), valuta, privacy-modus, app-vergrendeling (PIN of biometrie), JSON-export/import, demo-data reset.
+- **Lokale profielen + PIN (sinds 0.3.0)**: meerdere personen kunnen dezelfde installatie gebruiken met volledig gescheiden data per profiel, elk met een eigen 4-cijferige PIN. De PIN wordt alleen als hash opgeslagen, in dezelfde versleutelde secure-storage als de marktdata-API-keys (nooit in platte tekst, nooit in de gewone app-data).
+- **Instellingen**: thema (licht/donker/systeem), valuta, privacy-modus, profielbeheer, JSON-export/import, demo-data reset.
 - **Demo-data**: 4 rekeningen, 8 beleggingen, 26 transacties, 6 budgetten, 1 schuld en 12 maanden vermogenshistorie — allemaal onderling consistent (assets − liabilities = net worth, exact). Demo-data gebruikt nooit live marktdata en werkt altijd, ook zonder API-key.
-- **Live marktdata (optioneel, sinds 0.2.0)**: zie de sectie hieronder.
-- **92 unit tests** voor financiële berekeningen, FX-conversie, market-data caching en provider-foutafhandeling (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key).
+- **Live marktdata (optioneel, sinds 0.2.0, met eerlijke live-status sinds 0.4.0 en correcte currency-conversie sinds 0.4.1)**: koersen, instrumentgrafieken (1D–MAX) en wisselkoersen — zie de sectie hieronder.
+- **273 unit tests** voor financiële berekeningen, FX-conversie, market-data caching, live/offline-statuslogica en provider-foutafhandeling (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key, quote-currency ≠ positie-currency).
 
 ## Windows-desktopversie
 
@@ -44,7 +45,7 @@ Dit exporteert eerst de webbundel (`expo export -p web` → `dist/`) en verpakt 
 
 ### Installeren
 
-1. Dubbelklik `release\WealthOS Setup 0.2.0.exe`.
+1. Dubbelklik `release\WealthOS Setup <versie>.exe` (bijv. `WealthOS Setup 0.4.2.exe`).
 2. **Windows SmartScreen kan waarschuwen** ("Windows heeft je pc beschermd") — dit is normaal voor een app zonder betaald Authenticode-certificaat (~€300-500/jaar), niet een teken dat er iets mis is. Klik "Meer info" → "Toch uitvoeren".
 3. De installer is one-click: hij installeert direct naar `%LOCALAPPDATA%\Programs\WealthOS` en zet snelkoppelingen op het Bureaublad en in het Startmenu, zonder verdere vragen.
 4. Start WealthOS vanaf het Startmenu of Bureaublad zoals elk ander programma.
@@ -72,23 +73,49 @@ WealthOS kan actuele koersen, historische grafieken, dividend- en bedrijfsinform
 
 | Provider | Rol | Gebruikt voor |
 |---|---|---|
-| **Twelve Data** | Primair | Koersen (aandelen/ETF/crypto/forex), historische koersen, symboolzoeken, wisselkoersen |
-| **Alpha Vantage** | Secundair, optioneel | Alleen dividend- en bedrijfsinformatie |
+| **Twelve Data** | Primair | Koersen (aandelen/ETF/crypto/forex), historische koersen (grafieken), symboolzoeken, wisselkoersen |
+| **Alpha Vantage** | Secundair, optioneel | Alleen dividend- en bedrijfsinformatie — bewust nooit voor koersen (zie hieronder) |
 
-Beide zijn providerkeuzes achter een gedeelde interface (`MarketDataProviderClient` / `MarketDataService`) — geen scherm praat rechtstreeks met een provider, dus een providerwissel raakt nooit de UI.
+Beide zijn providerkeuzes achter een gedeelde interface (`MarketDataProviderClient` / `MarketDataService`) — geen scherm praat rechtstreeks met een provider, dus een providerwissel raakt nooit de UI. Deze scheiding is ook een bewuste juridische keuze: Alpha Vantage's realtime/15-min-vertraagde koersdata valt onder een aparte, beurs-gereguleerde licentie (FINRA/SEC) die niet gratis is; hun *dividend/company-overview*-endpoints vallen daar niet onder en zijn wel gratis beschikbaar (25 verzoeken/dag) — WealthOS gebruikt Alpha Vantage daarom uitsluitend voor dat laatste.
 
-### Belangrijk: gratis-tier beperkingen
+### Live/vertraagd/offline-status — nooit een verzonnen "LIVE"
+
+Elke gekoppelde belegging en elk wisselkoerspaar toont een eerlijke status, herleid uit een enkele functie die nooit raadt:
+
+- **LIVE** — de laatste ververs-poging is ook de laatst geslaagde, en recent genoeg (aandelen/ETF/forex binnen ~10 min, crypto binnen ~5 min).
+- **VERTRAAGD** — laatst geslaagde koers is ouder dan dat, maar er is niets fout gegaan.
+- **OFFLINE** — live marktdata staat uit, er is geen API-key, of er is nog nooit succesvol iets opgehaald.
+- **FOUT** — de laatste ververs-poging is mislukt (ratelimit, ongeldige key, offline, onbekend symbool) — met de exacte reden erbij.
+
+Deze status wordt nooit op cache-leeftijd alleen gebaseerd: een recente succesvolle koers die daarna niet meer ververst kan worden (bijv. omdat live marktdata is uitgezet) valt terug naar OFFLINE in plaats van een verouderde LIVE te blijven tonen.
+
+### Instrumentgrafieken
+
+Tikken op een gekoppelde aandeel/ETF/crypto/forex-positie opent een detailscherm met een echte koersgrafiek (1D/5D/1M/3M/1Y/MAX) op basis van Twelve Data's historische data — nooit demo- of willekeurige data. Wisselkoersen hebben een eigen overzicht ("Meer → Wisselkoersen") met dezelfde soort grafiek.
+
+### Multi-currency waardering — quote-valuta versus positie-valuta
+
+Een koers komt soms in een andere valuta binnen dan de positie zelf is opgeslagen (bijv. een BTC/USD-koers voor een positie die je zelf in EUR hebt aangemaakt, of een Amerikaans aandeel in een EUR-portefeuille). WealthOS onderscheidt dit expliciet:
+
+1. **Quote-valuta** (wat de provider teruggeeft) wordt via de bestaande wisselkoers-cache/provider omgerekend naar de **positie-valuta** (hoe jij de positie hebt aangemaakt) vóórdat de koers wordt opgeslagen.
+2. Is er geen geldige wisselkoers beschikbaar (offline, ratelimit, geen key) — dan blijft de positie op zijn laatst bekende, correcte waarde staan. Nooit een stille 1-op-1-omrekening, nooit een bedrag in de verkeerde valuta.
+3. Verschilt de koers- van de positie-valuta, dan staat dat expliciet bij de positie (bijv. "Koers in USD, omgerekend naar EUR").
+4. Portefeuille- en dashboardtotalen (in je eigen basisvaluta) gebruiken dezelfde, al-omgerekende waarde — nooit een losstaande, inconsistente berekening.
+
+### Belangrijk: gratis-tier beperkingen (laatst geverifieerd tegen de actuele officiële voorwaarden)
 
 - **Geen realtime**: koersen zijn vertraagd (doorgaans ~15 minuten) en worden zo gelabeld — nooit als "live" in de betekenis van tick-by-tick.
 - **Ratelimits**: Twelve Data's gratis "Basic"-plan staat 8 verzoeken/minuut en 800/dag toe. WealthOS ververst daarom niet vaker dan nodig (aandelen/ETF/forex ~10 min, crypto ~5 min), bundelt meerdere posities in één verzoek waar mogelijk, en wacht 15 minuten na een ratelimit-fout voordat het opnieuw probeert.
-- **Europese aandelen/ETF's zijn wisselend beschikbaar** op het gratis Twelve Data-plan — dit verschilt per instrument (bijv. Adyen is gratis beschikbaar, Heineken niet) en wordt niet vooraf gedocumenteerd door de provider. WealthOS kan dit dus niet garanderen; als een notering niet beschikbaar is op je gratis plan, toont de app een nette melding en blijft de laatst bekende of handmatig ingevoerde waarde zichtbaar — nooit een crash.
-- **Alleen persoonlijk, niet-commercieel gebruik**: elke gebruiker maakt zijn eigen gratis account aan en ziet alleen zijn eigen data — WealthOS heeft geen eigen server en stuurt niets door naar derden. Dit valt binnen de "personal/internal use"-voorwaarden van beide providers; commercieel hergebruik of het doorleveren van data aan anderen is nooit de bedoeling en wordt niet ondersteund.
+- **Amerikaanse markten zijn de kern van het gratis plan**; Twelve Data's eigen documentatie noemt realtime dekking primair voor Amerikaanse beurzen. **Europese aandelen/ETF's zijn daardoor wisselend beschikbaar** — dit verschilt per instrument (bijv. Adyen was gratis beschikbaar, Heineken niet) en wordt niet vooraf gegarandeerd door de provider. WealthOS kan dit dus niet garanderen; als een notering niet beschikbaar is op je gratis plan, toont de app een eerlijke FOUT-status en blijft de laatst bekende of handmatig ingevoerde waarde zichtbaar — nooit een crash, nooit een foutieve LIVE-melding.
+- **Dividend/bedrijfsinformatie**: op Twelve Data's gratis plan zitten fundamentals (dividend, company profile) achter een betaald plan — daarom haalt WealthOS die uitsluitend bij Alpha Vantage op (gratis, 25 verzoeken/dag), nooit bij Twelve Data.
+- **Alleen persoonlijk, niet-commercieel gebruik**: elke gebruiker maakt zijn eigen gratis account aan en ziet alleen zijn eigen data, opgehaald met zijn eigen key — WealthOS heeft geen eigen server, slaat niets centraal op en stuurt niets door naar derden of andere gebruikers. Dat valt binnen de "internal/personal use"-voorwaarden van beide providers (geen doorlevering aan derden, geen commercieel gebruik van gratis-tier-data); commercieel hergebruik wordt niet ondersteund. Deze voorwaarden zijn niet alleen ooit gecontroleerd maar zijn opnieuw tegen de actuele officiële pagina's van beide providers geverifieerd.
 
 ### API-keys: opslag en veiligheid
 
 - Keys worden **nooit** hardcoded, gelogd, of in een export/back-up meegenomen.
-- Op Windows staan ze versleuteld via Electron's `safeStorage` (Windows DPAPI) in een apart bestand (`secure-keys.json`), volledig gescheiden van de gewone app-data die de export/import-functie gebruikt.
+- Op Windows staan ze versleuteld via Electron's `safeStorage` (Windows DPAPI) in een apart bestand (`secure-keys.json`), volledig gescheiden van de gewone app-data die de export/import-functie gebruikt. Profiel-PIN's (zie hierboven) gebruiken dezelfde versleutelde opslag, elk onder een eigen per-profiel sleutel.
 - Verwijderen van een key via Instellingen wist 'm direct en definitief uit die versleutelde opslag.
+- Een export/back-up bevat nooit `secure-keys.json` en nooit een key-waarde — alleen booleans zoals "Twelve Data gekoppeld: ja/nee". Een import kan dus nooit een bestaande key overschrijven of verwijderen.
 
 ### Cache en offline-gedrag
 
@@ -103,7 +130,7 @@ features/       Domeinlogica die meerdere lagen combineert (demo-data, insights,
 hooks/          useTheme, usePrivacyFormat, useWealthSummary, usePortfolioSnapshots
 lib/            calculations.ts, storage.ts, security.ts, repositories/
 services/       banking/, brokerage/, market/ — providers achter interfaces
-store/          Zustand stores (accounts, investments, transactions, budgets, liabilities, settings)
+store/          Zustand stores (accounts, investments, transactions, budgets, liabilities, settings, marketData, profile)
 types/          models.ts (domeinmodel), providers.ts (toekomstige integraties)
 utils/          money.ts, date.ts, id.ts, validation.ts (Zod)
 constants/      theme.ts (design tokens), categories.ts
@@ -144,9 +171,9 @@ Bedragen worden intern als **integer eurocenten** opgeslagen (`10,25` → `1025`
 
 ### Beveiliging
 
-- PIN wordt nooit in platte tekst opgeslagen — alleen een SHA-256 hash (`lib/security.ts`, via `expo-crypto`) staat in SecureStore.
-- Biometrie wordt pas als "aan" getoond nadat `expo-local-authentication` daadwerkelijk hardware + enrollment bevestigt én een echte authenticatie-prompt is geslaagd — nooit optimistisch.
+- Elk profiel heeft een eigen PIN, nooit in platte tekst opgeslagen — alleen een SHA-256 hash (`lib/security.ts`, via `expo-crypto`) staat in de versleutelde secure-storage (`lib/secureKeyStore.ts`: Electron `safeStorage`/Windows DPAPI op desktop, `expo-secure-store` op mobiel), per profiel gescheiden zodat een PIN-reset of profiel-verwijdering nooit financiële data van een ander profiel kan raken.
 - Geen bankwachtwoorden, seed phrases of API-secrets ergens in de code of demo-data.
+- **Bekend aandachtspunt**: Instellingen → Beveiliging bevat nog een PIN/biometrie-instelling uit vóór het profielensysteem (0.3.0) die niet meer aan de daadwerkelijke app-toegang gekoppeld is — de profiel-PIN (hierboven) is de enige echte voordeur. Dit scherm heeft dus geen effect meer en zou opgeruimd moeten worden; dit raakt geen marktdata-functionaliteit en is bewust niet aangepakt in deze release (zie "Resterende aandachtspunten" verderop).
 - `.env`, credentials en secrets staan in `.gitignore`; `.env.example` bevat geen echte waarden en is niet nodig om de app te starten.
 
 ## Vereisten
@@ -191,7 +218,7 @@ Een iOS-build vereist altijd signing (een Apple-ontwikkelaarsaccount); zonder Ma
 ## Testen en controleren
 
 ```bash
-npm test          # 92 unit tests: financiële berekeningen + market-data/FX/cache
+npm test          # 273 unit tests: financiële berekeningen + market-data/FX/cache/live-status
 npm run typecheck # strict TypeScript, geen `any`
 npx expo-doctor   # health-check van dependencies en configuratie
 ```
@@ -256,13 +283,18 @@ Dit zijn de enige punten die niet "klaar" zijn omdat ze een keuze of account van
 - **EAS project-ID**: `app.json` bevat een placeholder (`REPLACE_WITH_EAS_PROJECT_ID`) die pas een echte waarde krijgt na `eas build:configure` met jouw eigen Expo-account.
 - **Apple Developer-account**: nodig voor elke iOS-build (development, TestFlight of App Store) — zonder account kan alleen Android en de webpreview gebouwd/getest worden.
 - **App Store / Play Store metadata**: screenshots, store-beschrijving en privacybeleid-URL zijn niet gemaakt — dat zijn creatieve/juridische keuzes die bij jou horen te liggen vlak voor publicatie. Het app-icoon en de splash screen zijn wel al ontworpen (zie `assets/icon.png`) en hoeven niet vervangen te worden.
-- **Real bank/broker-koppeling**: bewust niet gebouwd (zie "Geen echte bankkoppeling" in de opdracht) — de architectuur (`services/banking/`, `services/brokerage/`) is er wel klaar voor. Live marktdata (`services/market/`) is sinds 0.2.0 wél echt gebouwd, optioneel en gratis — zie de sectie hierboven.
+- **Real bank/broker-koppeling**: bewust niet gebouwd (zie "Geen echte bankkoppeling" in de opdracht) — de architectuur (`services/banking/`, `services/brokerage/`) is er wel klaar voor. Live marktdata (`services/market/`) is sinds 0.2.0 wél echt gebouwd, optioneel en gratis, en sinds 0.4.0/0.4.1 uitgebreid met eerlijke live-status, instrumentgrafieken en correcte multi-currency-waardering — zie de sectie hierboven.
+
+## Resterende aandachtspunten
+
+- Instellingen → Beveiliging bevat een niet-meer-functionele PIN/biometrie-instelling uit vóór het profielensysteem (0.3.0) — zie "Beveiliging" hierboven. Los van marktdata; bewust niet aangepakt in deze release.
+- Europese aandelen/ETF's blijven instrument-afhankelijk beschikbaar op het gratis Twelve Data-plan (zie "Belangrijk: gratis-tier beperkingen"). Dit is een providerbeperking, geen bug.
 
 ## Roadmap (toekomstige uitbreidingen, nu bewust niet gebouwd)
 
 1. Open Banking / PSD2-koppeling (via `BankingProvider`)
 2. Broker-koppelingen (via `BrokerageProvider`)
-3. ~~Live marktdata~~ — gebouwd in 0.2.0 (Twelve Data + Alpha Vantage, optioneel, gratis)
+3. ~~Live marktdata~~ — gebouwd in 0.2.0, uitgebreid met eerlijke live-status + grafieken in 0.4.0 en correcte multi-currency-waardering in 0.4.1 (Twelve Data + Alpha Vantage, optioneel, gratis)
 4. Cloud-sync en multi-device
 5. Push-notificaties (budget bijna bereikt, maandresultaat)
 6. Geavanceerde analytics

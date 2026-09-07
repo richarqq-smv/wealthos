@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 — Full live-data finalization: compliance re-verification, docs, regression
+
+- **Re-verified provider free-tier terms against the current (2026) official pages**, not just the original 0.2.0-era check: Twelve Data's Individual/Basic license (personal, internal, non-redistributed, non-commercial use — WealthOS's bring-your-own-key, local-only, no-server architecture fits this) and free-plan limits (8 req/min, 800/day, US-market-centric, fundamentals gated to paid plans); Alpha Vantage's free tier (25 req/day, includes OVERVIEW/DIVIDENDS, separate from its FINRA/SEC-regulated realtime-quote policy — which is exactly why WealthOS never uses Alpha Vantage for quotes). No provider or architecture change was required — the existing design already matches free-tier terms. No ECB or CoinGecko integration exists in the codebase (nothing to check there).
+- **Confirmed no SMV Advies references exist anywhere in the WealthOS codebase** (a `package-lock.json` scan hit is coincidental base64-hash noise, not a real reference — verified and left untouched).
+- **README overhauled** to match the app as it actually is today: local profiles + PIN (0.3.0), the LIVE/VERTRAAGD/OFFLINE/FOUT status model and instrument charts (0.4.0), and quote-currency vs. position-currency FX conversion (0.4.1) — previously undocumented. Test count corrected (92 → 273). Documented a known, non-market-data-related loose end: Instellingen → Beveiliging still shows a pre-0.3.0 PIN/biometric setting that no longer gates anything (the profile PIN is the only real lock) — flagged, not fixed, to avoid scope creep into the auth flow during a data-correctness/compliance release.
+- Full regression pass: all 273 existing tests re-run and passing, 0 TypeScript errors, 21/21 Expo Doctor, fresh install over the existing 0.4.1 installation re-verified (profiles/PIN/investments/API keys/settings all intact).
+
 ## 0.4.1 — Currency-correct live valuation
 
 - **Fixed a real financial-correctness bug**: a live quote was only ever applied to a position when the quote's currency exactly matched the position's own currency — e.g. a genuine BTC/USD quote against a EUR-denominated BTC position was silently ignored, leaving the position frozen at cost basis forever even while showing a LIVE badge and a working chart. Same issue for any USD/GBP-quoted stock held in a EUR position.
