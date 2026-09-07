@@ -21,6 +21,7 @@ import {
   isQuoteStale,
 } from "@/lib/marketData/cachePolicy";
 import { API_KEY_STORAGE, RATE_LIMIT_BACKOFF_MS } from "@/lib/marketData/constants";
+import { convertAmountMinor } from "@/lib/marketData/currencyConversion";
 import { TwelveDataProvider } from "./TwelveDataProvider";
 import { AlphaVantageProvider } from "./AlphaVantageProvider";
 
@@ -270,6 +271,40 @@ class MarketDataServiceImpl {
       registerResult("twelveData", error);
       return cached ?? null;
     }
+  }
+
+  /**
+   * Converts a quote's per-unit price (`quote.currency`, e.g. USD for a
+   * BTC/USD quote) into a different target currency (a position's own
+   * `currency`, e.g. EUR) via the existing FX cache/provider — never a
+   * silent 1:1 between different currencies, and never `NaN`/`Infinity`.
+   * Returns `null` (never a corrupted or wrong-currency number) when no
+   * valid rate is available in either direction, so the caller can leave
+   * the position at its last known, correctly-denominated value instead.
+   *
+   * QUOTE CURRENCY and the target (POSITION) CURRENCY are kept strictly
+   * distinct here — this only ever produces a value denominated in
+   * `targetCurrency`, matching the invariant the rest of the app relies on
+   * (`Investment.currentPriceMinor` is always in `Investment.currency`).
+   */
+  async convertQuotePrice(quote: MarketQuote, targetCurrency: string): Promise<number | null> {
+    if (quote.currency === targetCurrency) return quote.priceMinor;
+
+    const direct = await this.getFxRate(quote.currency, targetCurrency);
+    if (direct && Number.isFinite(direct.rate) && direct.rate > 0) {
+      return convertAmountMinor(quote.priceMinor, quote.currency, targetCurrency, () => direct.rate);
+    }
+
+    // The FX cache/provider key rates by exact base/quote direction — if
+    // only the inverse pair is available (e.g. EUR/USD cached but not
+    // USD/EUR), derive the rate we need from it instead of treating a
+    // direction-only cache miss as "no rate available at all".
+    const inverse = await this.getFxRate(targetCurrency, quote.currency);
+    if (inverse && Number.isFinite(inverse.rate) && inverse.rate > 0) {
+      return convertAmountMinor(quote.priceMinor, quote.currency, targetCurrency, () => 1 / inverse.rate);
+    }
+
+    return null;
   }
 
   async getDividend(investment: Investment): Promise<DividendInfo | null> {

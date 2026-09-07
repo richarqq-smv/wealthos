@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 — Currency-correct live valuation
+
+- **Fixed a real financial-correctness bug**: a live quote was only ever applied to a position when the quote's currency exactly matched the position's own currency — e.g. a genuine BTC/USD quote against a EUR-denominated BTC position was silently ignored, leaving the position frozen at cost basis forever even while showing a LIVE badge and a working chart. Same issue for any USD/GBP-quoted stock held in a EUR position.
+- **QUOTE CURRENCY, POSITION CURRENCY, and BASE CURRENCY are now kept strictly distinct end-to-end**: `MarketDataService.convertQuotePrice` converts a quote's price into the position's own currency via the existing FX cache/provider (`getFxRate`, with automatic inverse-pair fallback when only the reverse direction is cached) *before* it is ever written to `currentPriceMinor` — the field's existing invariant (always denominated in `investment.currency`) is preserved, so every downstream calculation (portfolio/net-worth totals, P&L, allocation) keeps working unmodified and stays consistent across the dashboard, Investments overview, and instrument detail.
+- **Honest degradation, never a wrong number**: if no valid FX rate is available in either direction (offline, rate-limited, no key, no cache), the position is left untouched at its last known, correctly-denominated value — never a silent 1:1 conversion, never `NaN`/`Infinity`, never a foreign currency's raw number mistaken for the position's own.
+- **Investment detail now names the conversion** when a position's live quote is priced in a different currency than the position itself (e.g. "Koers in USD, omgerekend naar EUR"), using the existing caption line — no redesign.
+- Added 19 new automated tests covering same-currency passthrough (no FX lookup at all), direct and inverse-pair FX conversion (EUR/USD/GBP in every combination), cached and offline FX degradation, non-positive/corrupt-rate rejection, exchange-aware matching alongside currency conversion, and a full live-quote → FX-conversion → position-value → P&L → portfolio-total chain matching a hand-verified worked example exactly.
+
 ## 0.4.0 — Honest live status + instrument charts
 
 - **Fixed the core "does this even refresh?" bug**: "Laatst bijgewerkt" was bumped unconditionally at the end of every auto-refresh cycle, even when nothing was actually fetched (everything still fresh, no API key, rate-limited, or every request failed) — the timestamp could look current while nothing had genuinely refreshed. `refreshAll`/`refreshOne` now report an honest `hadSuccess` (true only when at least one quote genuinely came back this cycle), and the timestamp is bumped only then.

@@ -91,6 +91,15 @@ export default function InvestmentDetailScreen() {
   const liveStatus = investment
     ? deriveLiveStatus(investmentAssetType(investment), instrumentStatus, marketData.enabled)
     : "offline";
+  // The last raw quote (QUOTE CURRENCY, e.g. USD for a BTC/USD quote) vs.
+  // this position's own currency (POSITION CURRENCY, e.g. EUR) — surfaced
+  // below only when they differ, so it's clear the shown value is already
+  // FX-converted rather than the provider's native-currency number.
+  const lastQuote = useMarketDataStore((s) => s.quotesBySymbol[instrumentKey]);
+  const quoteCurrencyNote =
+    investment && lastQuote && lastQuote.currency !== investment.currency
+      ? `Koers in ${lastQuote.currency}, omgerekend naar ${investment.currency}`
+      : null;
 
   useEffect(() => {
     if (!investment || !showLiveData || !marketData.assetToggles.historical || !investment.providerSymbol) {
@@ -266,6 +275,7 @@ export default function InvestmentDetailScreen() {
             </View>
             <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
               {INVESTMENT_TYPE_LABEL[investment.type]} · {investment.broker || "Onbekende broker"}
+              {quoteCurrencyNote ? ` · ${quoteCurrencyNote}` : ""}
             </Text>
           </Card>
 

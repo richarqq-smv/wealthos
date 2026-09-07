@@ -13,6 +13,20 @@ import { nowISO } from "@/utils/date";
  * the existing (untouched) 0.1.0 net-worth/portfolio calculations pick it up
  * automatically — no separate "live value" codepath needed elsewhere in the
  * app. Only touches positions the user explicitly linked to live data.
+ *
+ * QUOTE CURRENCY (what the provider returns, e.g. USD for a BTC/USD quote)
+ * and POSITION CURRENCY (`investment.currency`, e.g. EUR) are two different
+ * things and are never conflated: when they differ, the quote's price is
+ * converted into the position's own currency via
+ * `MarketDataService.convertQuotePrice` (the existing FX cache/provider —
+ * see rule #12/60, no second FX system) BEFORE it is ever written to
+ * `currentPriceMinor`. That field's existing invariant — always denominated
+ * in `investment.currency` — is exactly what every downstream calculation
+ * (`calculateInvestmentValue`, P&L, portfolio/net-worth totals) already
+ * assumes, so nothing downstream needs to change. If no valid FX rate is
+ * available (offline, rate-limited, no key, no cache), the position is left
+ * untouched at its last known, correctly-denominated value — never a
+ * silent 1:1, never a wrong-currency number.
  */
 async function applyQuoteToInvestments(quote: MarketQuote): Promise<void> {
   const { investments, editInvestment } = useInvestmentsStore.getState();
@@ -25,9 +39,10 @@ async function applyQuoteToInvestments(quote: MarketQuote): Promise<void> {
       (inv.exchange ?? "") === (quote.exchange ?? "")
   );
   for (const investment of matches) {
-    if (investment.currency !== quote.currency) continue;
+    const priceMinor = await MarketDataService.convertQuotePrice(quote, investment.currency);
+    if (priceMinor === null) continue;
     await editInvestment(investment.id, {
-      currentPriceMinor: quote.priceMinor,
+      currentPriceMinor: priceMinor,
       priceUpdatedAt: quote.timestamp,
     });
   }
