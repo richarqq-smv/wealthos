@@ -31,11 +31,24 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+!.env.example
+
+# secrets / credentials
+*credentials*.json
+*.secret
+
+# coverage
+coverage/
 
 # typescript
 *.tsbuildinfo
 
+
 # generated native folders
 /ios
 /android
+
+# Electron desktop build output
+/release
