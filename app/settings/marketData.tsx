@@ -190,8 +190,8 @@ export default function MarketDataSettingsScreen() {
     : "Nog niet vernieuwd";
 
   const handleRefreshNow = async () => {
-    await refreshAll(investments);
-    await markMarketDataUpdated();
+    const { hadSuccess } = await refreshAll(investments);
+    if (hadSuccess) await markMarketDataUpdated();
   };
 
   return (

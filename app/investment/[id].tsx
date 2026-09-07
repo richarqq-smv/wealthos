@@ -23,8 +23,11 @@ import { spacing, typography } from "@/constants/theme";
 import { useInvestmentsStore } from "@/store/investmentsStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useMarketDataStore } from "@/store/marketDataStore";
-import { MarketDataService } from "@/services/market/MarketDataService";
+import { MarketDataService, investmentAssetType } from "@/services/market/MarketDataService";
+import { marketDataInstrumentKey } from "@/types/marketData";
 import type { CompanyProfile, DividendInfo, HistoricalPeriod, HistoricalSeries } from "@/types/marketData";
+import type { HistoricalResult } from "@/services/market/MarketDataService";
+import { deriveLiveStatus, EMPTY_REFRESH_STATUS } from "@/lib/marketData/liveStatus";
 import {
   calculateInvestedCapital,
   calculateInvestmentValue,
@@ -36,11 +39,12 @@ import { formatDateShort, nowISO } from "@/utils/date";
 import { INVESTMENT_TYPE_LABEL } from "@/constants/categories";
 
 const HISTORY_PERIOD_OPTIONS: { value: HistoricalPeriod; label: string }[] = [
+  { value: "1D", label: "1D" },
+  { value: "1W", label: "5D" },
   { value: "1M", label: "1M" },
   { value: "3M", label: "3M" },
-  { value: "6M", label: "6M" },
   { value: "1Y", label: "1J" },
-  { value: "5Y", label: "5J" },
+  { value: "MAX", label: "MAX" },
 ];
 
 export default function InvestmentDetailScreen() {
@@ -73,22 +77,50 @@ export default function InvestmentDetailScreen() {
 
   const [period, setPeriod] = useState<HistoricalPeriod>("3M");
   const [history, setHistory] = useState<HistoricalSeries | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [dividend, setDividend] = useState<DividendInfo | null>(null);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
 
   const showLiveData = Boolean(investment?.liveDataEnabled && investment?.providerSymbol);
 
+  const instrumentKey = investment
+    ? marketDataInstrumentKey(investment.providerSymbol ?? investment.id, investment.exchange)
+    : "";
+  const instrumentStatus = useMarketDataStore((s) => s.statusByInstrument[instrumentKey]) ?? EMPTY_REFRESH_STATUS;
+  const liveStatus = investment
+    ? deriveLiveStatus(investmentAssetType(investment), instrumentStatus, marketData.enabled)
+    : "offline";
+
   useEffect(() => {
-    if (!investment || !showLiveData || !marketData.assetToggles.historical) {
+    if (!investment || !showLiveData || !marketData.assetToggles.historical || !investment.providerSymbol) {
       setHistory(null);
+      setHistoryError(null);
       return;
     }
     let cancelled = false;
     setIsLoadingHistory(true);
-    MarketDataService.getHistorical(investment, period)
-      .then((series) => {
-        if (!cancelled) setHistory(series);
+    setHistoryError(null);
+    MarketDataService.getHistoricalForSymbol(
+      investment.providerSymbol,
+      investmentAssetType(investment),
+      period,
+      investment.exchange
+    )
+      .then((result: HistoricalResult) => {
+        if (cancelled) return;
+        if (result.ok) {
+          setHistory(result.series);
+        } else {
+          setHistory(null);
+          setHistoryError(
+            result.reason === "noApiKey"
+              ? null // not an error — historical is simply off, EmptyState already covers this via showLiveData
+              : result.reason === "rateLimited"
+                ? "Limiet bereikt, probeer later opnieuw."
+                : "Kon historische koersdata niet ophalen."
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingHistory(false);
@@ -212,7 +244,11 @@ export default function InvestmentDetailScreen() {
               <DataOriginBadge origin={investment.origin} />
               {showLiveData ? (
                 <View style={styles.liveDataRow}>
-                  <LiveDataBadge priceUpdatedAt={investment.priceUpdatedAt} />
+                  <LiveDataBadge
+                    status={liveStatus}
+                    timestamp={instrumentStatus.lastSuccessAt}
+                    errorKind={instrumentStatus.lastErrorKind}
+                  />
                   <IconButton
                     name="refresh"
                     onPress={() => {
@@ -258,9 +294,15 @@ export default function InvestmentDetailScreen() {
               </View>
               {isLoadingHistory ? (
                 <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />
+              ) : historyError ? (
+                <Text style={[typography.caption, { color: colors.negative, paddingVertical: spacing.md }]}>
+                  {historyError}
+                </Text>
               ) : history && history.points.length > 1 ? (
                 <PortfolioChart
                   points={history.points.map((p) => ({ date: p.date, valueMinor: p.closeMinor }))}
+                  currency={history.currency}
+                  showAxisLabels
                 />
               ) : (
                 <Text style={[typography.caption, { color: colors.textTertiary, paddingVertical: spacing.md }]}>

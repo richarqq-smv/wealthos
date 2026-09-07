@@ -5,6 +5,8 @@ import { MarketDataCacheRepository } from "@/lib/repositories/MarketDataCacheRep
 import { MarketDataService } from "@/services/market/MarketDataService";
 import { useInvestmentsStore } from "@/store/investmentsStore";
 import { marketDataInstrumentKey } from "@/types/marketData";
+import { EMPTY_REFRESH_STATUS, type RefreshStatus } from "@/lib/marketData/liveStatus";
+import { nowISO } from "@/utils/date";
 
 /**
  * Writes a fetched quote back into the matching investment's stored price so
@@ -46,17 +48,42 @@ const inFlightInstrumentRefreshes = new Set<string>();
 
 interface MarketDataState {
   quotesBySymbol: Record<string, MarketQuote>;
+  /** Per-instrument (`symbol@exchange`) refresh bookkeeping — the only source `deriveLiveStatus` may read from. Never derive "live" from cache age alone. */
+  statusByInstrument: Record<string, RefreshStatus>;
   isRefreshing: boolean;
   lastError: MarketDataErrorKind | null;
+  /** When the next automatic refresh tick is expected — set by useMarketDataAutoRefresh, read by any UI that wants a countdown. Null when auto-refresh is off. */
+  nextRefreshAt: string | null;
   loadCachedQuotes: () => Promise<void>;
-  refreshAll: (investments: Investment[]) => Promise<void>;
+  /** Returns whether at least one quote was genuinely fetched this cycle — the only honest basis for bumping a "last successful update" timestamp. */
+  refreshAll: (investments: Investment[]) => Promise<{ hadSuccess: boolean }>;
   refreshOne: (investment: Investment) => Promise<void>;
+  setNextRefreshAt: (iso: string | null) => void;
+  /** For call sites that fetch outside `refreshAll`/`refreshOne` (the FX detail screen, via `getFxRate`) but still need to report honest status through the exact same `deriveLiveStatus` machinery — never poke `statusByInstrument` directly. */
+  recordInstrumentAttempt: (instrumentKey: string) => void;
+  recordInstrumentResult: (instrumentKey: string, result: { success: true } | { success: false; error: MarketDataErrorKind }) => void;
+}
+
+function markAttempted(status: Record<string, RefreshStatus>, instrumentKey: string, at: string): void {
+  const current = status[instrumentKey] ?? EMPTY_REFRESH_STATUS;
+  status[instrumentKey] = { ...current, lastAttemptAt: at };
+}
+
+function markSucceeded(status: Record<string, RefreshStatus>, instrumentKey: string, at: string): void {
+  status[instrumentKey] = { lastAttemptAt: at, lastSuccessAt: at, lastErrorKind: null };
+}
+
+function markFailed(status: Record<string, RefreshStatus>, instrumentKey: string, at: string, error: MarketDataErrorKind): void {
+  const current = status[instrumentKey] ?? EMPTY_REFRESH_STATUS;
+  status[instrumentKey] = { ...current, lastAttemptAt: at, lastErrorKind: error };
 }
 
 export const useMarketDataStore = create<MarketDataState>((set, get) => ({
   quotesBySymbol: {},
+  statusByInstrument: {},
   isRefreshing: false,
   lastError: null,
+  nextRefreshAt: null,
 
   loadCachedQuotes: async () => {
     const quotes = await MarketDataCacheRepository.getAllQuotes();
@@ -64,16 +91,30 @@ export const useMarketDataStore = create<MarketDataState>((set, get) => ({
   },
 
   refreshAll: async (investments) => {
-    if (get().isRefreshing) return;
+    if (get().isRefreshing) return { hadSuccess: false };
     set({ isRefreshing: true, lastError: null });
     try {
       const result = await MarketDataService.refreshQuotes(investments);
       const quotes = await MarketDataCacheRepository.getAllQuotes();
-      set({ quotesBySymbol: quotes, lastError: result.error ?? null });
+      const now = nowISO();
+
+      set((state) => {
+        const status = { ...state.statusByInstrument };
+        for (const instrumentKey of result.attempted) markAttempted(status, instrumentKey, now);
+        for (const quote of result.quotes) {
+          markSucceeded(status, marketDataInstrumentKey(quote.providerSymbol, quote.exchange), now);
+        }
+        for (const failure of result.failed) {
+          markFailed(status, failure.instrumentKey, now, failure.error);
+        }
+        return { quotesBySymbol: quotes, statusByInstrument: status, lastError: result.error ?? null };
+      });
+
       // Only re-apply the quotes actually fetched this cycle, not the entire
       // cache — investments whose cache entry was already fresh (and thus
       // skipped by refreshQuotes) don't need a redundant AsyncStorage write.
       await Promise.all(result.quotes.map(applyQuoteToInvestments));
+      return { hadSuccess: result.quotes.length > 0 };
     } finally {
       set({ isRefreshing: false });
     }
@@ -84,20 +125,55 @@ export const useMarketDataStore = create<MarketDataState>((set, get) => ({
     if (inFlightInstrumentRefreshes.has(instrumentKey)) return;
 
     inFlightInstrumentRefreshes.add(instrumentKey);
+    const now = nowISO();
+    set((state) => {
+      const status = { ...state.statusByInstrument };
+      markAttempted(status, instrumentKey, now);
+      return { statusByInstrument: status };
+    });
     try {
       const result = await MarketDataService.getQuote(investment);
+      const at = nowISO();
       if (result.quote) {
-        set((state) => ({
-          quotesBySymbol: {
-            ...state.quotesBySymbol,
-            [marketDataInstrumentKey(result.quote!.providerSymbol, result.quote!.exchange)]: result.quote!,
-          },
-        }));
+        const quoteKey = marketDataInstrumentKey(result.quote.providerSymbol, result.quote.exchange);
+        set((state) => {
+          const status = { ...state.statusByInstrument };
+          markSucceeded(status, quoteKey, at);
+          return {
+            quotesBySymbol: { ...state.quotesBySymbol, [quoteKey]: result.quote! },
+            statusByInstrument: status,
+          };
+        });
         await applyQuoteToInvestments(result.quote);
       }
-      if (result.error) set({ lastError: result.error });
+      if (result.error) {
+        set((state) => {
+          const status = { ...state.statusByInstrument };
+          markFailed(status, instrumentKey, at, result.error!);
+          return { statusByInstrument: status, lastError: result.error! };
+        });
+      }
     } finally {
       inFlightInstrumentRefreshes.delete(instrumentKey);
     }
+  },
+
+  setNextRefreshAt: (iso) => set({ nextRefreshAt: iso }),
+
+  recordInstrumentAttempt: (instrumentKey) => {
+    const status = { ...get().statusByInstrument };
+    markAttempted(status, instrumentKey, nowISO());
+    set({ statusByInstrument: status });
+  },
+
+  recordInstrumentResult: (instrumentKey, result) => {
+    const status = { ...get().statusByInstrument };
+    const at = nowISO();
+    if (result.success) {
+      markSucceeded(status, instrumentKey, at);
+    } else {
+      markFailed(status, instrumentKey, at, result.error);
+    }
+    set({ statusByInstrument: status });
   },
 }));

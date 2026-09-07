@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 — Honest live status + instrument charts
+
+- **Fixed the core "does this even refresh?" bug**: "Laatst bijgewerkt" was bumped unconditionally at the end of every auto-refresh cycle, even when nothing was actually fetched (everything still fresh, no API key, rate-limited, or every request failed) — the timestamp could look current while nothing had genuinely refreshed. `refreshAll`/`refreshOne` now report an honest `hadSuccess` (true only when at least one quote genuinely came back this cycle), and the timestamp is bumped only then.
+- **No more silently swallowed errors**: `getQuote`'s backoff path and `refreshQuotes`'s per-symbol batch failures used to disappear into a cache fallback with no signal. Both now report the real failure kind (`rateLimited`, `networkUnavailable`, `invalidApiKey`, …) up through the store instead of pretending nothing happened.
+- **New per-instrument + global LIVE/VERTRAAGD/OFFLINE/FOUT status**, derived by a single pure function (`deriveLiveStatus`/`deriveGlobalLiveStatus`) from real attempt/success/error bookkeeping — never inferred from cache age alone, and never shown as LIVE without at least one genuinely successful fetch. Shown with the exact time (HH:MM:SS, not just HH:MM) on the dashboard, the Investments overview, every instrument detail screen, and the new FX screens.
+- **"Nu vernieuwen" on the Investments overview** via a new `MarketDataStatusBar`: global status, "Laatst bijgewerkt: HH:MM:SS", a live "volgende update over: XXs" countdown, and a manual refresh button that genuinely re-calls the provider (not a re-render/cache read) with duplicate-request protection.
+- **Instrument detail charts**: tapping any live-linked stock, ETF, crypto, or forex position (no separate hardcoded per-symbol logic) opens a chart with real Twelve Data historical OHLC — 1D/5D/1M/3M/1Y/MAX period selector, automatic currency, price/date axis labels, loading/empty/error states, and its own honest LIVE/VERTRAAGD/OFFLINE/FOUT badge.
+- **New symbol-based historical path** (`getHistoricalForSymbol`) extracted from the existing investment-shaped `getHistorical`, reused as-is by two new FX screens ("Wisselkoersen" list + pair detail with its own chart) — no second, competing historical-data implementation for forex.
+- **Range→interval mapping and caching**: each chart period maps to an explicit Twelve Data `interval`/`outputsize` pair; historical series are cached per `symbol@exchange + period` with in-flight de-duplication, so switching tabs or re-rendering never re-fetches data that's already cached or already in flight.
+- Added ~70 new automated tests: live-status derivation (LIVE/VERTRAAGD/OFFLINE/FOUT, all edge cases), honest `hadSuccess` gating end-to-end (service → store → auto-refresh hook), exchange-aware batch refresh with partial-failure and rate-limit-backoff tracking, historical-series caching/in-flight-dedup/crypto/forex, range→interval mapping for every period, chart data transformation (unit conversion, ordering, malformed-point handling), and that none of the new status/chart machinery ever carries a key-shaped field.
+
 ## 0.2.0 — Live market data
 
 Optional, free, local-only live market data. Off by default; the app is fully

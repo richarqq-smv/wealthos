@@ -5,6 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { spacing, typography } from "@/constants/theme";
 import { usePrivacyFormat } from "@/hooks/usePrivacyFormat";
 import { formatDateMedium } from "@/utils/date";
+import type { CurrencyCode } from "@/types/models";
 
 export interface ChartPoint {
   date: string;
@@ -14,16 +15,21 @@ export interface ChartPoint {
 interface PortfolioChartProps {
   points: ChartPoint[];
   height?: number;
+  /** Overrides the user's base currency — an instrument's own chart (e.g. a USD NASDAQ listing) must show its own currency, not silently reformat into the portfolio's base one. */
+  currency?: CurrencyCode | string;
+  /** Renders min/max price labels on the y-axis and first/last date on the x-axis. */
+  showAxisLabels?: boolean;
 }
 
 const PADDING_X = 4;
 const PADDING_Y = 12;
 
-export function PortfolioChart({ points, height = 180 }: PortfolioChartProps) {
+export function PortfolioChart({ points, height = 180, currency, showAxisLabels = false }: PortfolioChartProps) {
   const { colors } = useTheme();
   const { money } = usePrivacyFormat();
   const [width, setWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const currencyOption = currency ? { currency: currency as CurrencyCode } : undefined;
 
   const { path, areaPath, coords } = useMemo(() => {
     if (points.length < 2 || width === 0) {
@@ -76,11 +82,15 @@ export function PortfolioChart({ points, height = 180 }: PortfolioChartProps) {
     );
   }
 
+  const values = points.map((p) => p.valueMinor);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+
   return (
     <View>
       <View style={styles.header}>
         <Text style={[typography.h3, { color: colors.textPrimary }]}>
-          {active ? money(active.valueMinor) : ""}
+          {active ? money(active.valueMinor, currencyOption) : ""}
         </Text>
         {active ? (
           <Text style={[typography.caption, { color: colors.textSecondary }]}>
@@ -97,6 +107,16 @@ export function PortfolioChart({ points, height = 180 }: PortfolioChartProps) {
         onResponderMove={handleTouch}
         onResponderRelease={() => setActiveIndex(null)}
       >
+        {showAxisLabels ? (
+          <>
+            <Text style={[typography.micro, styles.priceAxisTop, { color: colors.textTertiary }]}>
+              {money(maxValue, currencyOption)}
+            </Text>
+            <Text style={[typography.micro, styles.priceAxisBottom, { color: colors.textTertiary }]}>
+              {money(minValue, currencyOption)}
+            </Text>
+          </>
+        ) : null}
         {width > 0 ? (
           <Svg width={width} height={height}>
             <Defs>
@@ -124,6 +144,14 @@ export function PortfolioChart({ points, height = 180 }: PortfolioChartProps) {
           </Svg>
         ) : null}
       </View>
+      {showAxisLabels ? (
+        <View style={styles.dateAxis}>
+          <Text style={[typography.micro, { color: colors.textTertiary }]}>{formatDateMedium(points[0]!.date)}</Text>
+          <Text style={[typography.micro, { color: colors.textTertiary }]}>
+            {formatDateMedium(points[points.length - 1]!.date)}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -131,4 +159,7 @@ export function PortfolioChart({ points, height = 180 }: PortfolioChartProps) {
 const styles = StyleSheet.create({
   header: { marginBottom: spacing.xs },
   empty: { alignItems: "center", justifyContent: "center" },
+  priceAxisTop: { position: "absolute", top: 0, left: 0, zIndex: 1 },
+  priceAxisBottom: { position: "absolute", bottom: 0, left: 0, zIndex: 1 },
+  dateAxis: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing.xxs },
 });

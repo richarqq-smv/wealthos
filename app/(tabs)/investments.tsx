@@ -12,6 +12,7 @@ import { FilterChips } from "@/components/FilterChips";
 import { InvestmentCard } from "@/components/InvestmentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { IconButton } from "@/components/IconButton";
+import { MarketDataStatusBar } from "@/components/MarketDataStatusBar";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing, typography } from "@/constants/theme";
 import { useInvestmentsStore } from "@/store/investmentsStore";
@@ -108,6 +109,8 @@ export default function InvestmentsScreen() {
         <AppHeader title="Beleggingen" />
         <IconButton name="add-circle-outline" onPress={() => router.push("/investment/add")} accessibilityLabel="Belegging toevoegen" />
       </View>
+
+      <MarketDataStatusBar />
 
       <Card style={styles.summaryCard}>
         <Text style={[typography.caption, { color: colors.textSecondary }]}>Totale portefeuille</Text>

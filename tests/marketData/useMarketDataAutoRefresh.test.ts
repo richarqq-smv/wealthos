@@ -58,7 +58,7 @@ let refreshAllSpy: jest.Mock;
 let markMarketDataUpdatedSpy: jest.Mock;
 
 function enableAutoRefresh(investments: Investment[]) {
-  refreshAllSpy = jest.fn().mockResolvedValue(undefined);
+  refreshAllSpy = jest.fn().mockResolvedValue({ hadSuccess: true });
   markMarketDataUpdatedSpy = jest.fn().mockResolvedValue(undefined);
 
   act(() => {
@@ -67,7 +67,7 @@ function enableAutoRefresh(investments: Investment[]) {
       markMarketDataUpdated: markMarketDataUpdatedSpy,
     }));
     useInvestmentsStore.setState({ investments });
-    useMarketDataStore.setState({ refreshAll: refreshAllSpy });
+    useMarketDataStore.setState({ refreshAll: refreshAllSpy, setNextRefreshAt: jest.fn() });
   });
 }
 
@@ -78,6 +78,54 @@ beforeEach(() => {
 afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
+});
+
+describe("useMarketDataAutoRefresh — honest timestamp gating (never a fake 'Laatst bijgewerkt')", () => {
+  it("calls markMarketDataUpdated when the tick's refreshAll genuinely reports hadSuccess:true", async () => {
+    enableAutoRefresh([investment()]);
+    renderAutoRefreshHook();
+    await flush();
+
+    expect(refreshAllSpy).toHaveBeenCalledTimes(1);
+    expect(markMarketDataUpdatedSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT touch the timestamp when refreshAll genuinely ran but reported hadSuccess:false (nothing came back)", async () => {
+    const a = investment();
+    refreshAllSpy = jest.fn().mockResolvedValue({ hadSuccess: false });
+    markMarketDataUpdatedSpy = jest.fn().mockResolvedValue(undefined);
+    act(() => {
+      useSettingsStore.setState((state) => ({
+        marketData: { ...state.marketData, enabled: true, autoRefresh: true, refreshIntervalMinutes: REFRESH_INTERVAL_MINUTES },
+        markMarketDataUpdated: markMarketDataUpdatedSpy,
+      }));
+      useInvestmentsStore.setState({ investments: [a] });
+      useMarketDataStore.setState({ refreshAll: refreshAllSpy, setNextRefreshAt: jest.fn() });
+    });
+
+    renderAutoRefreshHook();
+    await flush();
+
+    // The provider WAS genuinely re-called this tick (not skipped) — only the
+    // timestamp bump is withheld, since nothing actually came back.
+    expect(refreshAllSpy).toHaveBeenCalledTimes(1);
+    expect(markMarketDataUpdatedSpy).not.toHaveBeenCalled();
+  });
+
+  it("sets nextRefreshAt to null when auto-refresh is disabled, so no stale countdown lingers in the UI", async () => {
+    const setNextRefreshAtSpy = jest.fn();
+    act(() => {
+      useSettingsStore.setState((state) => ({
+        marketData: { ...state.marketData, enabled: true, autoRefresh: false },
+      }));
+      useMarketDataStore.setState({ refreshAll: jest.fn(), setNextRefreshAt: setNextRefreshAtSpy });
+    });
+
+    renderAutoRefreshHook();
+    await flush();
+
+    expect(setNextRefreshAtSpy).toHaveBeenCalledWith(null);
+  });
 });
 
 describe("useMarketDataAutoRefresh — H1: native `document` safety", () => {

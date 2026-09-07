@@ -18,6 +18,7 @@ const ITEMS: MenuItem[] = [
   { icon: "bar-chart-outline", label: "Analyse", route: "/analytics" },
   { icon: "pie-chart-outline", label: "Budgetten", route: "/budget" },
   { icon: "document-text-outline", label: "Schulden", route: "/liability" },
+  { icon: "swap-horizontal-outline", label: "Wisselkoersen", route: "/fx" },
   { icon: "settings-outline", label: "Instellingen", route: "/settings" },
 ];
 

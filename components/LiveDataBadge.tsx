@@ -1,35 +1,52 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing, typography } from "@/constants/theme";
+import {
+  LIVE_STATUS_LABEL,
+  MARKET_DATA_ERROR_LABEL,
+  formatTimeHHMMSS,
+  type LiveStatus,
+} from "@/lib/marketData/liveStatus";
+import type { MarketDataErrorKind } from "@/types/marketData";
 
 interface LiveDataBadgeProps {
-  priceUpdatedAt?: string | null;
-  /** Minutes after which the badge switches from "live" to "cached" styling. Defaults to 30. */
-  freshAfterMinutes?: number;
+  status: LiveStatus;
+  /** Timestamp of the last genuinely successful fetch — never shown for "live"/"delayed" unless this is set, by construction of how callers derive `status`. */
+  timestamp: string | null;
+  errorKind?: MarketDataErrorKind | null;
 }
 
-/** Subtle status indicator for a live-data-linked position — never shown for manual-only positions. */
-export function LiveDataBadge({ priceUpdatedAt, freshAfterMinutes = 30 }: LiveDataBadgeProps) {
+const STATUS_COLOR_KEY: Record<LiveStatus, "positive" | "warning" | "textTertiary" | "negative"> = {
+  live: "positive",
+  delayed: "warning",
+  offline: "textTertiary",
+  error: "negative",
+};
+
+/**
+ * The single place allowed to render a "LIVE"-shaped label — `status` must
+ * come from `deriveLiveStatus`/`deriveGlobalLiveStatus`, never from raw
+ * cache age, so this can never show LIVE off the back of a failed refresh.
+ */
+export function LiveDataBadge({ status, timestamp, errorKind }: LiveDataBadgeProps) {
   const { colors } = useTheme();
+  const color = colors[STATUS_COLOR_KEY[status]];
 
-  if (!priceUpdatedAt) {
-    return (
-      <View style={styles.row}>
-        <View style={[styles.dot, { backgroundColor: colors.textTertiary }]} />
-        <Text style={[typography.micro, { color: colors.textTertiary }]}>Live · nog niet opgehaald</Text>
-      </View>
-    );
-  }
-
-  const ageMinutes = (Date.now() - new Date(priceUpdatedAt).getTime()) / 60000;
-  const isFresh = ageMinutes >= 0 && ageMinutes <= freshAfterMinutes;
-  const time = new Date(priceUpdatedAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+  const suffix =
+    status === "error" && errorKind
+      ? MARKET_DATA_ERROR_LABEL[errorKind]
+      : timestamp
+        ? `bijgewerkt ${formatTimeHHMMSS(timestamp)}`
+        : status === "offline"
+          ? "nog niet opgehaald"
+          : undefined;
 
   return (
     <View style={styles.row}>
-      <View style={[styles.dot, { backgroundColor: isFresh ? colors.positive : colors.textTertiary }]} />
-      <Text style={[typography.micro, { color: isFresh ? colors.positive : colors.textTertiary }]}>
-        {isFresh ? `Live · bijgewerkt ${time}` : `Cache · bijgewerkt ${time}`}
+      <View style={[styles.dot, { backgroundColor: color }]} />
+      <Text style={[typography.micro, { color }]}>
+        {LIVE_STATUS_LABEL[status]}
+        {suffix ? ` · ${suffix}` : ""}
       </Text>
     </View>
   );

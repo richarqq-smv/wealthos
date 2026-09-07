@@ -22,6 +22,8 @@ import { useWealthSummary } from "@/hooks/useWealthSummary";
 import { filterSnapshotsByPeriod, usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { useTransactionsStore } from "@/store/transactionsStore";
 import { useSettingsStore } from "@/store/settingsStore";
+import { useMarketDataStore } from "@/store/marketDataStore";
+import { deriveGlobalLiveStatus } from "@/lib/marketData/liveStatus";
 import { generateInsights } from "@/features/insights/generateInsights";
 import type { PeriodKey } from "@/utils/date";
 import { nowISO } from "@/utils/date";
@@ -44,7 +46,15 @@ export default function DashboardScreen() {
   const { snapshots } = usePortfolioSnapshots();
   const transactions = useTransactionsStore((s) => s.transactions);
   const marketData = useSettingsStore((s) => s.marketData);
+  const marketDataLastError = useMarketDataStore((s) => s.lastError);
   const [period, setPeriod] = useState<PeriodKey>("3M");
+
+  const globalLiveStatus = deriveGlobalLiveStatus({
+    enabled: marketData.enabled,
+    hasApiKey: marketData.twelveDataConfigured,
+    lastSuccessfulUpdate: marketData.lastSuccessfulUpdate,
+    lastError: marketDataLastError,
+  });
 
   const chartPoints = useMemo(() => {
     const filtered = filterSnapshotsByPeriod(snapshots, period);
@@ -81,7 +91,9 @@ export default function DashboardScreen() {
       <Card style={styles.netWorthCard}>
         <View style={styles.netWorthHeaderRow}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Totaal vermogen</Text>
-          {marketData.enabled ? <LiveDataBadge priceUpdatedAt={marketData.lastSuccessfulUpdate} /> : null}
+          {marketData.enabled ? (
+            <LiveDataBadge status={globalLiveStatus} timestamp={marketData.lastSuccessfulUpdate} errorKind={marketDataLastError} />
+          ) : null}
         </View>
         <MoneyText minor={netWorthMinor} variant="display" style={{ marginTop: spacing.xxs }} />
         <View style={styles.changeRow}>

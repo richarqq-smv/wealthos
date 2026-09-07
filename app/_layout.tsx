@@ -84,6 +84,8 @@ function RootNavigator() {
           <Stack.Screen name="liability/add" />
           <Stack.Screen name="liability/[id]" />
           <Stack.Screen name="analytics/index" />
+          <Stack.Screen name="fx/index" />
+          <Stack.Screen name="fx/[pair]" />
           <Stack.Screen name="settings/index" />
           <Stack.Screen name="settings/profile" />
           <Stack.Screen name="settings/appearance" />

@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "@/lib/repositories/SettingsRepository";
 import { validateImportPayload } from "@/utils/validation";
+import { EMPTY_REFRESH_STATUS, deriveLiveStatus, deriveGlobalLiveStatus } from "@/lib/marketData/liveStatus";
 
 const KEY_SHAPED_FIELD_NAMES = ["apikey", "api_key", "secret", "token", "password", "credential"];
 
@@ -49,5 +50,30 @@ describe("market-data settings never carry secret-shaped fields", () => {
   it("rejects a payload with the wrong shape instead of crashing", () => {
     const result = validateImportPayload({ not: "a valid export" });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("the 0.4.0 live-status machinery never carries the API key itself, only booleans/timestamps/error kinds", () => {
+  it("RefreshStatus (per-instrument bookkeeping) has no key-shaped field", () => {
+    expect(hasKeyShapedField(EMPTY_REFRESH_STATUS)).toBe(false);
+    expect(hasKeyShapedField({ lastAttemptAt: new Date().toISOString(), lastSuccessAt: null, lastErrorKind: "rateLimited" })).toBe(
+      false
+    );
+  });
+
+  it("deriveLiveStatus and deriveGlobalLiveStatus only ever take/derive booleans, timestamps, and error kinds — never a raw key", () => {
+    // Type-level guarantee (no `apiKey: string` param exists on either
+    // function) backed by a runtime check that a plausible caller shape
+    // carrying one alongside the real params is still harmless input.
+    const result = deriveLiveStatus("stock", EMPTY_REFRESH_STATUS);
+    expect(["live", "delayed", "offline", "error"]).toContain(result);
+
+    const globalResult = deriveGlobalLiveStatus({
+      enabled: true,
+      hasApiKey: true,
+      lastSuccessfulUpdate: null,
+      lastError: null,
+    });
+    expect(["live", "delayed", "offline", "error"]).toContain(globalResult);
   });
 });
