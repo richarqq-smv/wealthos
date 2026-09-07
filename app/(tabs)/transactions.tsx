@@ -57,7 +57,10 @@ export default function TransactionsScreen() {
     <ScreenContainer>
       <View style={styles.headerRow}>
         <AppHeader title="Transacties" />
-        <IconButton name="add-circle-outline" onPress={() => router.push("/transaction/add")} accessibilityLabel="Transactie toevoegen" />
+        <View style={styles.headerActions}>
+          <IconButton name="download-outline" onPress={() => router.push("/transaction/import")} accessibilityLabel="Transacties importeren" />
+          <IconButton name="add-circle-outline" onPress={() => router.push("/transaction/add")} accessibilityLabel="Transactie toevoegen" />
+        </View>
       </View>
 
       <View style={styles.searchRow}>
@@ -95,6 +98,7 @@ export default function TransactionsScreen() {
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerActions: { flexDirection: "row", alignItems: "center" },
   searchRow: { marginBottom: spacing.sm },
   filterRow: { marginBottom: spacing.md },
   group: { marginBottom: spacing.md },

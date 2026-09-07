@@ -75,6 +75,7 @@ function RootNavigator() {
           <Stack.Screen name="investment/add" />
           <Stack.Screen name="investment/[id]" />
           <Stack.Screen name="transaction/add" />
+          <Stack.Screen name="transaction/import" />
           <Stack.Screen name="transaction/[id]" />
           <Stack.Screen name="budget/index" />
           <Stack.Screen name="budget/add" />
