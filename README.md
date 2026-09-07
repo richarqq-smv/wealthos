@@ -16,8 +16,9 @@ WealthOS is een persoonlijke tracker en geeft geen financieel advies. Het is gee
 - **Schulden**: hypotheek, lening, creditcard — meegenomen in de netto-vermogensberekening.
 - **Analyse**: inkomsten/uitgaven deze maand, netto cashflow, spaarpercentage, uitgavenanalyse per categorie, maandvergelijking.
 - **Instellingen**: thema (licht/donker/systeem), valuta, privacy-modus, app-vergrendeling (PIN of biometrie), JSON-export/import, demo-data reset.
-- **Demo-data**: 4 rekeningen, 8 beleggingen, 26 transacties, 6 budgetten, 1 schuld en 12 maanden vermogenshistorie — allemaal onderling consistent (assets − liabilities = net worth, exact).
-- **41 unit tests** voor alle financiële berekeningen (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop).
+- **Demo-data**: 4 rekeningen, 8 beleggingen, 26 transacties, 6 budgetten, 1 schuld en 12 maanden vermogenshistorie — allemaal onderling consistent (assets − liabilities = net worth, exact). Demo-data gebruikt nooit live marktdata en werkt altijd, ook zonder API-key.
+- **Live marktdata (optioneel, sinds 0.2.0)**: zie de sectie hieronder.
+- **92 unit tests** voor financiële berekeningen, FX-conversie, market-data caching en provider-foutafhandeling (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key).
 
 ## Windows-desktopversie
 
@@ -43,7 +44,7 @@ Dit exporteert eerst de webbundel (`expo export -p web` → `dist/`) en verpakt 
 
 ### Installeren
 
-1. Dubbelklik `release\WealthOS Setup 0.1.0.exe`.
+1. Dubbelklik `release\WealthOS Setup 0.2.0.exe`.
 2. **Windows SmartScreen kan waarschuwen** ("Windows heeft je pc beschermd") — dit is normaal voor een app zonder betaald Authenticode-certificaat (~€300-500/jaar), niet een teken dat er iets mis is. Klik "Meer info" → "Toch uitvoeren".
 3. De installer is one-click: hij installeert direct naar `%LOCALAPPDATA%\Programs\WealthOS` en zet snelkoppelingen op het Bureaublad en in het Startmenu, zonder verdere vragen.
 4. Start WealthOS vanaf het Startmenu of Bureaublad zoals elk ander programma.
@@ -55,6 +56,43 @@ Verwijderen kan gewoon via Instellingen → Apps, of via de meegeïnstalleerde "
 ### Problemen oplossen
 
 Renderer-fouten (JavaScript-fouten in de UI) worden weggeschreven naar `%APPDATA%\WealthOS\logs\renderer.log` — dit bestand bestaat alleen als er daadwerkelijk een waarschuwing of fout is opgetreden; geen bestand betekent een schone sessie.
+
+## Live marktdata (optioneel)
+
+WealthOS kan actuele koersen, historische grafieken, dividend- en bedrijfsinformatie tonen voor beleggingen die je daaraan koppelt — volledig optioneel, gratis, en met je eigen API-key. Staat live marktdata uit (de standaardinstelling) of heb je geen key ingevuld, dan werkt de rest van de app exact zoals in 0.1.0.
+
+### Instellen (geen terminal nodig)
+
+1. Ga naar **Instellingen → Live marktdata** en zet de schakelaar aan.
+2. Maak gratis een account op [twelvedata.com](https://twelvedata.com) en/of [alphavantage.co](https://www.alphavantage.co/support/#api-key), en plak de gratis API-key in het betreffende veld.
+3. Druk op "Verbinding testen" om te bevestigen dat de key werkt.
+4. Kies bij "Belegging toevoegen" via het zoekveld de juiste beurs-notering (bijv. Euronext Amsterdam versus een Amerikaanse notering van hetzelfde aandeel) — WealthOS onthoudt daarna welke exacte notering bij die positie hoort.
+
+### Providers en wat ze doen
+
+| Provider | Rol | Gebruikt voor |
+|---|---|---|
+| **Twelve Data** | Primair | Koersen (aandelen/ETF/crypto/forex), historische koersen, symboolzoeken, wisselkoersen |
+| **Alpha Vantage** | Secundair, optioneel | Alleen dividend- en bedrijfsinformatie |
+
+Beide zijn providerkeuzes achter een gedeelde interface (`MarketDataProviderClient` / `MarketDataService`) — geen scherm praat rechtstreeks met een provider, dus een providerwissel raakt nooit de UI.
+
+### Belangrijk: gratis-tier beperkingen
+
+- **Geen realtime**: koersen zijn vertraagd (doorgaans ~15 minuten) en worden zo gelabeld — nooit als "live" in de betekenis van tick-by-tick.
+- **Ratelimits**: Twelve Data's gratis "Basic"-plan staat 8 verzoeken/minuut en 800/dag toe. WealthOS ververst daarom niet vaker dan nodig (aandelen/ETF/forex ~10 min, crypto ~5 min), bundelt meerdere posities in één verzoek waar mogelijk, en wacht 15 minuten na een ratelimit-fout voordat het opnieuw probeert.
+- **Europese aandelen/ETF's zijn wisselend beschikbaar** op het gratis Twelve Data-plan — dit verschilt per instrument (bijv. Adyen is gratis beschikbaar, Heineken niet) en wordt niet vooraf gedocumenteerd door de provider. WealthOS kan dit dus niet garanderen; als een notering niet beschikbaar is op je gratis plan, toont de app een nette melding en blijft de laatst bekende of handmatig ingevoerde waarde zichtbaar — nooit een crash.
+- **Alleen persoonlijk, niet-commercieel gebruik**: elke gebruiker maakt zijn eigen gratis account aan en ziet alleen zijn eigen data — WealthOS heeft geen eigen server en stuurt niets door naar derden. Dit valt binnen de "personal/internal use"-voorwaarden van beide providers; commercieel hergebruik of het doorleveren van data aan anderen is nooit de bedoeling en wordt niet ondersteund.
+
+### API-keys: opslag en veiligheid
+
+- Keys worden **nooit** hardcoded, gelogd, of in een export/back-up meegenomen.
+- Op Windows staan ze versleuteld via Electron's `safeStorage` (Windows DPAPI) in een apart bestand (`secure-keys.json`), volledig gescheiden van de gewone app-data die de export/import-functie gebruikt.
+- Verwijderen van een key via Instellingen wist 'm direct en definitief uit die versleutelde opslag.
+
+### Cache en offline-gedrag
+
+Elke koers, historische reeks, dividend- en bedrijfsprofiel wordt lokaal gecached, met de beurs-notering als onderdeel van de cache-sleutel (zodat bijvoorbeeld een Amerikaanse en een Europese notering van hetzelfde aandeel nooit door elkaar lopen). Is de provider tijdelijk onbereikbaar, geeft een ratelimit-fout, of is er geen internet: WealthOS toont de laatst bekende gecachte waarde met een duidelijk "Cache · bijgewerkt HH:MM"-label in plaats van een foutmelding of een crash.
 
 ## Architectuur
 
@@ -153,7 +191,7 @@ Een iOS-build vereist altijd signing (een Apple-ontwikkelaarsaccount); zonder Ma
 ## Testen en controleren
 
 ```bash
-npm test          # 41 unit tests voor alle financiële berekeningen
+npm test          # 92 unit tests: financiële berekeningen + market-data/FX/cache
 npm run typecheck # strict TypeScript, geen `any`
 npx expo-doctor   # health-check van dependencies en configuratie
 ```
@@ -218,13 +256,13 @@ Dit zijn de enige punten die niet "klaar" zijn omdat ze een keuze of account van
 - **EAS project-ID**: `app.json` bevat een placeholder (`REPLACE_WITH_EAS_PROJECT_ID`) die pas een echte waarde krijgt na `eas build:configure` met jouw eigen Expo-account.
 - **Apple Developer-account**: nodig voor elke iOS-build (development, TestFlight of App Store) — zonder account kan alleen Android en de webpreview gebouwd/getest worden.
 - **App Store / Play Store metadata**: screenshots, store-beschrijving en privacybeleid-URL zijn niet gemaakt — dat zijn creatieve/juridische keuzes die bij jou horen te liggen vlak voor publicatie. Het app-icoon en de splash screen zijn wel al ontworpen (zie `assets/icon.png`) en hoeven niet vervangen te worden.
-- **Real bank/broker/market-data-koppeling**: bewust niet gebouwd (zie "Geen echte bankkoppeling" in de opdracht) — de architectuur (`services/*/`) is er wel klaar voor.
+- **Real bank/broker-koppeling**: bewust niet gebouwd (zie "Geen echte bankkoppeling" in de opdracht) — de architectuur (`services/banking/`, `services/brokerage/`) is er wel klaar voor. Live marktdata (`services/market/`) is sinds 0.2.0 wél echt gebouwd, optioneel en gratis — zie de sectie hierboven.
 
 ## Roadmap (toekomstige uitbreidingen, nu bewust niet gebouwd)
 
 1. Open Banking / PSD2-koppeling (via `BankingProvider`)
 2. Broker-koppelingen (via `BrokerageProvider`)
-3. Live marktdata (via `MarketDataProvider`)
+3. ~~Live marktdata~~ — gebouwd in 0.2.0 (Twelve Data + Alpha Vantage, optioneel, gratis)
 4. Cloud-sync en multi-device
 5. Push-notificaties (budget bijna bereikt, maandresultaat)
 6. Geavanceerde analytics

@@ -4,6 +4,7 @@ import type { MarketDataErrorKind, MarketQuote } from "@/types/marketData";
 import { MarketDataCacheRepository } from "@/lib/repositories/MarketDataCacheRepository";
 import { MarketDataService } from "@/services/market/MarketDataService";
 import { useInvestmentsStore } from "@/store/investmentsStore";
+import { marketDataInstrumentKey } from "@/types/marketData";
 
 /**
  * Writes a fetched quote back into the matching investment's stored price so
@@ -14,7 +15,12 @@ import { useInvestmentsStore } from "@/store/investmentsStore";
 async function applyQuoteToInvestments(quote: MarketQuote): Promise<void> {
   const { investments, editInvestment } = useInvestmentsStore.getState();
   const matches = investments.filter(
-    (inv) => inv.liveDataEnabled && inv.providerSymbol === quote.providerSymbol
+    (inv) =>
+      inv.liveDataEnabled &&
+      inv.providerSymbol === quote.providerSymbol &&
+      // Same ticker on a different exchange (e.g. a NASDAQ ADR vs a Euronext
+      // listing) is a different instrument — never cross-apply its price.
+      (inv.exchange ?? "") === (quote.exchange ?? "")
   );
   for (const investment of matches) {
     if (investment.currency !== quote.currency) continue;
@@ -61,7 +67,10 @@ export const useMarketDataStore = create<MarketDataState>((set, get) => ({
     const result = await MarketDataService.getQuote(investment);
     if (result.quote) {
       set((state) => ({
-        quotesBySymbol: { ...state.quotesBySymbol, [result.quote!.symbol]: result.quote! },
+        quotesBySymbol: {
+          ...state.quotesBySymbol,
+          [marketDataInstrumentKey(result.quote!.providerSymbol, result.quote!.exchange)]: result.quote!,
+        },
       }));
       await applyQuoteToInvestments(result.quote);
     }

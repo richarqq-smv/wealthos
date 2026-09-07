@@ -1,6 +1,6 @@
 {
   "name": "wealthos",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
@@ -90,6 +90,9 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/tests/jest.setup.js"
+    ],
     "collectCoverageFrom": [
       "lib/**/*.{ts,tsx}",
       "utils/**/*.{ts,tsx}"

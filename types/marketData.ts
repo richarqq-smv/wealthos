@@ -7,6 +7,8 @@ export type MarketAssetType = "stock" | "etf" | "crypto" | "forex";
 export interface MarketQuote {
   symbol: string;
   providerSymbol: string;
+  /** Which listing this quote is for, when the position was disambiguated (e.g. "Euronext" vs "NASDAQ" for the same ticker). */
+  exchange?: string;
   provider: MarketDataProviderId;
   assetType: MarketAssetType;
   priceMinor: number;
@@ -18,6 +20,11 @@ export interface MarketQuote {
   isDelayed: boolean;
 }
 
+/** A stable cache/matching key so "ASML on NASDAQ" and "ASML on Euronext" never collide. */
+export function marketDataInstrumentKey(providerSymbol: string, exchange?: string): string {
+  return `${providerSymbol}@${exchange ?? ""}`;
+}
+
 export type HistoricalPeriod = "1D" | "1W" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "5Y" | "MAX";
 
 export interface HistoricalPoint {
@@ -27,6 +34,7 @@ export interface HistoricalPoint {
 
 export interface HistoricalSeries {
   symbol: string;
+  exchange?: string;
   period: HistoricalPeriod;
   points: HistoricalPoint[];
   currency: CurrencyCode | string;

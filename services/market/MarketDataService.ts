@@ -11,7 +11,7 @@ import type {
   MarketQuote,
   SymbolSearchResult,
 } from "@/types/marketData";
-import { MarketDataError } from "@/types/marketData";
+import { MarketDataError, marketDataInstrumentKey } from "@/types/marketData";
 import { getSecureKey } from "@/lib/secureKeyStore";
 import { MarketDataCacheRepository } from "@/lib/repositories/MarketDataCacheRepository";
 import {
@@ -73,7 +73,7 @@ class MarketDataServiceImpl {
       return { quote: null, fromCache: false, error: "notFound", errorMessage: "Geen gekoppeld symbool." };
     }
 
-    const cached = await MarketDataCacheRepository.getQuote(investment.providerSymbol);
+    const cached = await MarketDataCacheRepository.getQuote(investment.providerSymbol, investment.exchange);
     const assetType = toAssetType(investment);
     const fresh = cached && !isQuoteStale(assetType, cached.timestamp);
     if (fresh) return { quote: cached, fromCache: true };
@@ -103,12 +103,13 @@ class MarketDataServiceImpl {
 
     for (const investment of tracked) {
       const symbol = investment.providerSymbol!;
-      if (seen.has(symbol)) continue;
-      const cached = await MarketDataCacheRepository.getQuote(symbol);
+      const instrumentKey = marketDataInstrumentKey(symbol, investment.exchange);
+      if (seen.has(instrumentKey)) continue;
+      const cached = await MarketDataCacheRepository.getQuote(symbol, investment.exchange);
       const assetType = toAssetType(investment);
       if (!cached || isQuoteStale(assetType, cached.timestamp)) {
         toRefresh.push({ providerSymbol: symbol, assetType, exchange: investment.exchange });
-        seen.add(symbol);
+        seen.add(instrumentKey);
       }
     }
 
@@ -142,7 +143,7 @@ class MarketDataServiceImpl {
 
   async getHistorical(investment: Investment, period: HistoricalPeriod): Promise<HistoricalSeries | null> {
     if (!investment.providerSymbol) return null;
-    const cached = await MarketDataCacheRepository.getHistorical(investment.providerSymbol, period);
+    const cached = await MarketDataCacheRepository.getHistorical(investment.providerSymbol, period, investment.exchange);
     if (cached) return cached;
 
     const apiKey = await getApiKey("twelveData");

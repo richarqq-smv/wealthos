@@ -1,4 +1,5 @@
 import { readValue, writeValue } from "@/lib/storage";
+import { marketDataInstrumentKey } from "@/types/marketData";
 import type {
   CompanyProfile,
   DividendInfo,
@@ -30,8 +31,8 @@ const EMPTY_CACHE: MarketDataCacheDocument = {
   fxRates: {},
 };
 
-function historicalKey(symbol: string, period: string): string {
-  return `${symbol}:${period}`;
+function historicalKey(symbol: string, period: string, exchange?: string): string {
+  return `${marketDataInstrumentKey(symbol, exchange)}:${period}`;
 }
 
 function fxKey(base: string, quote: string): string {
@@ -51,14 +52,15 @@ async function readCache(): Promise<MarketDataCacheDocument> {
 }
 
 class MarketDataCacheRepositoryImpl {
-  async getQuote(symbol: string): Promise<MarketQuote | undefined> {
+  /** `exchange` MUST be passed whenever the position has one — "ASML on NASDAQ" and "ASML on Euronext" are different instruments and must never share a cache entry. */
+  async getQuote(symbol: string, exchange?: string): Promise<MarketQuote | undefined> {
     const cache = await readCache();
-    return cache.quotes[symbol];
+    return cache.quotes[marketDataInstrumentKey(symbol, exchange)];
   }
 
   async setQuote(quote: MarketQuote): Promise<void> {
     const cache = await readCache();
-    cache.quotes[quote.symbol] = quote;
+    cache.quotes[marketDataInstrumentKey(quote.providerSymbol, quote.exchange)] = quote;
     await writeValue(CACHE_KEY, cache);
   }
 
@@ -67,14 +69,14 @@ class MarketDataCacheRepositoryImpl {
     return cache.quotes;
   }
 
-  async getHistorical(symbol: string, period: string): Promise<HistoricalSeries | undefined> {
+  async getHistorical(symbol: string, period: string, exchange?: string): Promise<HistoricalSeries | undefined> {
     const cache = await readCache();
-    return cache.historical[historicalKey(symbol, period)];
+    return cache.historical[historicalKey(symbol, period, exchange)];
   }
 
   async setHistorical(series: HistoricalSeries): Promise<void> {
     const cache = await readCache();
-    cache.historical[historicalKey(series.symbol, series.period)] = series;
+    cache.historical[historicalKey(series.symbol, series.period, series.exchange)] = series;
     await writeValue(CACHE_KEY, cache);
   }
 

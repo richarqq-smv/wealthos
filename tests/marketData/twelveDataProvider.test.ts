@@ -119,7 +119,9 @@ describe("TwelveDataProvider.getQuotesBatch", () => {
 
   it("routes exchange-disambiguated symbols through individual getQuote calls", async () => {
     mockFetchOnce(200, { symbol: "ASML", close: "700.00", currency: "EUR" });
-    mockFetchOnce(200, { AAPL: { symbol: "AAPL", close: "150.00", currency: "USD" } });
+    // Only one "plain" (non-disambiguated) symbol here, so it also goes through
+    // the single-quote endpoint, not the multi-symbol keyed-by-symbol shape.
+    mockFetchOnce(200, { symbol: "AAPL", close: "150.00", currency: "USD" });
 
     const quotes = await TwelveDataProvider.getQuotesBatch!(
       [

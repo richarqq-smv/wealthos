@@ -78,7 +78,8 @@ function throwIfErrorBody(body: unknown): asserts body is Record<string, unknown
 function parseQuoteBody(
   data: Record<string, unknown>,
   providerSymbol: string,
-  assetType: MarketAssetType
+  assetType: MarketAssetType,
+  exchange?: string
 ): MarketQuote {
   const close = Number.parseFloat(String(data.close ?? ""));
   const previousClose = data.previous_close !== undefined ? Number.parseFloat(String(data.previous_close)) : NaN;
@@ -92,6 +93,7 @@ function parseQuoteBody(
   return {
     symbol: providerSymbol,
     providerSymbol,
+    exchange,
     provider: "twelveData",
     assetType,
     priceMinor: toMinorUnits(close),
@@ -125,7 +127,7 @@ export const TwelveDataProvider: MarketDataProviderClient = {
     const url = `${BASE_URL}/quote?symbol=${encodeURIComponent(providerSymbol)}${exchangeParam}&apikey=${encodeURIComponent(apiKey)}`;
     const body = await fetchJson(url);
     throwIfErrorBody(body);
-    return parseQuoteBody(body as Record<string, unknown>, providerSymbol, assetType);
+    return parseQuoteBody(body as Record<string, unknown>, providerSymbol, assetType, exchange);
   },
 
   async getQuotesBatch(symbols, apiKey): Promise<MarketQuote[]> {
@@ -206,6 +208,7 @@ export const TwelveDataProvider: MarketDataProviderClient = {
 
     return {
       symbol: providerSymbol,
+      exchange,
       period,
       points,
       currency: typeof data.meta === "object" && data.meta !== null && "currency" in data.meta
