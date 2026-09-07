@@ -165,10 +165,28 @@ function attachNavigationGuard(win, allowedOrigin) {
   });
 }
 
+/**
+ * F11 and Ctrl+Shift+F toggle fullscreen; Escape exits it. The app has no
+ * visible menu bar (`autoHideMenuBar` + no application menu), so there is no
+ * other discoverable way to reach fullscreen — this is the only entry point.
+ */
+function attachFullScreenShortcuts(win) {
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    if (input.key === "F11" || (input.key.toLowerCase() === "f" && input.control && input.shift)) {
+      win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+    } else if ((input.key === "Escape" || input.code === "Escape") && win.isFullScreen()) {
+      win.setFullScreen(false);
+      event.preventDefault();
+    }
+  });
+}
+
 function createWindow(startUrl) {
   const win = new BrowserWindow({
-    width: 480,
-    height: 860,
+    width: 1280,
+    height: 800,
     minWidth: 380,
     minHeight: 640,
     backgroundColor: "#F7F7F5",
@@ -183,11 +201,14 @@ function createWindow(startUrl) {
     },
   });
 
-  win.setMaximumSize(600, 1100);
+  // No maximum size: earlier builds capped this window at 600×1100, which
+  // made the desktop app permanently phone-sized regardless of the actual
+  // window size — maximizing or resizing wider had no visual effect at all.
   Menu.setApplicationMenu(null);
   win.loadURL(startUrl);
   attachRendererLogging(win);
   attachNavigationGuard(win, new URL(startUrl).origin);
+  attachFullScreenShortcuts(win);
 
   return win;
 }

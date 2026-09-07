@@ -159,6 +159,27 @@ export interface Settings {
   marketData: MarketDataSettings;
 }
 
+/**
+ * A local Windows user profile — lets multiple people share one WealthOS
+ * installation with fully isolated data. Lives in a global (never
+ * profile-scoped) registry. The PIN hash is deliberately NOT a field here:
+ * it lives only in OS-level secure storage (Electron safeStorage/DPAPI via
+ * `lib/secureKeyStore.ts`, keyed per profile id), structurally separate from
+ * both this registry and every profile's financial data (which lives under
+ * its own `wealthos:profile:<id>:*` storage namespace) — so a PIN reset can
+ * never touch financial data, financial data can never leak between
+ * profiles, and the PIN hash can never end up in a plain-JSON export.
+ */
+export interface Profile {
+  id: string;
+  name: string;
+  createdAt: ISODateString;
+  lastLoginAt: ISODateString | null;
+  isDemo: boolean;
+  /** True until a PIN has been set for this profile — new profiles set one at creation time and never see this; migrated pre-0.3.0 profiles always start here since the old app-lock PIN could not be safely carried over. The demo profile never has a PIN and never checks this. */
+  needsPinSetup?: boolean;
+}
+
 export interface ExportPayload {
   version: 1;
   exportedAt: ISODateString;

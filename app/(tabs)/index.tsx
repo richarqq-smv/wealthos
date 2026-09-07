@@ -17,6 +17,7 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { LiveDataBadge } from "@/components/LiveDataBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing, typography } from "@/constants/theme";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useWealthSummary } from "@/hooks/useWealthSummary";
 import { filterSnapshotsByPeriod, usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { useTransactionsStore } from "@/store/transactionsStore";
@@ -36,6 +37,8 @@ const PERIOD_OPTIONS: { value: PeriodKey; label: string }[] = [
 
 export default function DashboardScreen() {
   const { colors } = useTheme();
+  const { tier } = useBreakpoint();
+  const isWideDesktop = tier === "wideDesktop";
   const { cashMinor, portfolioMinor, liabilitiesMinor, netWorthMinor, allocation, investments } =
     useWealthSummary();
   const { snapshots } = usePortfolioSnapshots();
@@ -130,53 +133,59 @@ export default function DashboardScreen() {
         <AllocationChart slices={allocation} />
       </Card>
 
-      <View style={styles.sectionHeaderRow}>
-        <Text style={[typography.h3, { color: colors.textPrimary }]}>Portefeuille</Text>
-        <SecondaryButton
-          label="Bekijk portefeuille"
-          onPress={() => router.push("/(tabs)/investments")}
-          fullWidth={false}
-        />
-      </View>
-      {topHoldings.length === 0 ? (
-        <EmptyState
-          icon="trending-up-outline"
-          title="Nog geen beleggingen"
-          description="Voeg je eerste belegging toe om je portefeuille te volgen."
-          actionLabel="Belegging toevoegen"
-          onAction={() => router.push("/investment/add")}
-        />
-      ) : (
-        <View style={styles.list}>
-          {topHoldings.map((investment) => (
-            <InvestmentCard key={investment.id} investment={investment} />
-          ))}
+      <View style={isWideDesktop ? styles.twoColumnRow : undefined}>
+        <View style={isWideDesktop ? styles.twoColumnItem : undefined}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[typography.h3, { color: colors.textPrimary }]}>Portefeuille</Text>
+            <SecondaryButton
+              label="Bekijk portefeuille"
+              onPress={() => router.push("/(tabs)/investments")}
+              fullWidth={false}
+            />
+          </View>
+          {topHoldings.length === 0 ? (
+            <EmptyState
+              icon="trending-up-outline"
+              title="Nog geen beleggingen"
+              description="Voeg je eerste belegging toe om je portefeuille te volgen."
+              actionLabel="Belegging toevoegen"
+              onAction={() => router.push("/investment/add")}
+            />
+          ) : (
+            <View style={styles.list}>
+              {topHoldings.map((investment) => (
+                <InvestmentCard key={investment.id} investment={investment} />
+              ))}
+            </View>
+          )}
         </View>
-      )}
 
-      <View style={styles.sectionHeaderRow}>
-        <Text style={[typography.h3, { color: colors.textPrimary }]}>Recente transacties</Text>
-        <SecondaryButton
-          label="Alle transacties"
-          onPress={() => router.push("/(tabs)/transactions")}
-          fullWidth={false}
-        />
+        <View style={isWideDesktop ? styles.twoColumnItem : undefined}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[typography.h3, { color: colors.textPrimary }]}>Recente transacties</Text>
+            <SecondaryButton
+              label="Alle transacties"
+              onPress={() => router.push("/(tabs)/transactions")}
+              fullWidth={false}
+            />
+          </View>
+          {recentTransactions.length === 0 ? (
+            <EmptyState
+              icon="swap-vertical-outline"
+              title="Nog geen transacties"
+              description="Voeg je eerste transactie toe om je geldstromen te volgen."
+              actionLabel="Transactie toevoegen"
+              onAction={() => router.push("/transaction/add")}
+            />
+          ) : (
+            <Card>
+              {recentTransactions.map((transaction) => (
+                <TransactionRow key={transaction.id} transaction={transaction} />
+              ))}
+            </Card>
+          )}
+        </View>
       </View>
-      {recentTransactions.length === 0 ? (
-        <EmptyState
-          icon="swap-vertical-outline"
-          title="Nog geen transacties"
-          description="Voeg je eerste transactie toe om je geldstromen te volgen."
-          actionLabel="Transactie toevoegen"
-          onAction={() => router.push("/transaction/add")}
-        />
-      ) : (
-        <Card>
-          {recentTransactions.map((transaction) => (
-            <TransactionRow key={transaction.id} transaction={transaction} />
-          ))}
-        </Card>
-      )}
     </ScreenContainer>
   );
 }
@@ -190,6 +199,8 @@ const styles = StyleSheet.create({
   summaryCard: { flex: 1 },
   quickActions: { marginBottom: spacing.md },
   section: { marginBottom: spacing.md },
+  twoColumnRow: { flexDirection: "row", gap: spacing.lg },
+  twoColumnItem: { flex: 1, minWidth: 0 },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",

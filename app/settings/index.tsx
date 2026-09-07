@@ -7,6 +7,7 @@ import { TextField } from "@/components/form/TextField";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing, touchSize, typography } from "@/constants/theme";
 import { useSettingsStore } from "@/store/settingsStore";
+import { useProfileStore } from "@/store/profileStore";
 import { useState } from "react";
 
 interface Row {
@@ -56,12 +57,11 @@ export default function SettingsScreen() {
   const setPrivacyMode = useSettingsStore((s) => s.setPrivacyMode);
   const themePreference = useSettingsStore((s) => s.themePreference);
   const currency = useSettingsStore((s) => s.currency);
-  const appLockMethod = useSettingsStore((s) => s.appLockMethod);
   const marketDataEnabled = useSettingsStore((s) => s.marketData.enabled);
+  const activeProfileName = useProfileStore((s) => s.activeProfile?.name ?? "");
   const [name, setName] = useState(userName);
 
   const themeLabel = { light: "Licht", dark: "Donker", system: "Systeem" }[themePreference];
-  const appLockLabel = { none: "Uit", pin: "PIN", biometric: "Biometrie" }[appLockMethod];
 
   return (
     <ScreenContainer>
@@ -97,8 +97,8 @@ export default function SettingsScreen() {
         Verberg financiële bedragen op het scherm.
       </Text>
 
-      <SectionCard title="Beveiliging">
-        <NavRow row={{ icon: "lock-closed-outline", label: "App-vergrendeling", value: appLockLabel, route: "/settings/security" }} isLast />
+      <SectionCard title="Account">
+        <NavRow row={{ icon: "person-circle-outline", label: "Profiel", value: activeProfileName, route: "/settings/profile" }} isLast />
       </SectionCard>
 
       <SectionCard title="Data">
@@ -119,7 +119,7 @@ export default function SettingsScreen() {
 
       <SectionCard title="Over">
         <View style={styles.padded}>
-          <Text style={[typography.body, { color: colors.textPrimary }]}>WealthOS 0.2.0</Text>
+          <Text style={[typography.body, { color: colors.textPrimary }]}>WealthOS 0.3.0</Text>
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
             WealthOS is een persoonlijke financiële tracker en geeft geen financieel advies.
           </Text>

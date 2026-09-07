@@ -3,6 +3,8 @@ import { RefreshControl, ScrollView, StyleSheet, View, type ViewStyle } from "re
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing } from "@/constants/theme";
+import { contentMaxWidth } from "@/constants/breakpoints";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 interface ScreenContainerProps {
   children: ReactNode;
@@ -22,10 +24,16 @@ export function ScreenContainer({
   edges = ["top"],
 }: ScreenContainerProps) {
   const { colors } = useTheme();
+  const { isDesktop } = useBreakpoint();
+
+  // On a wide window, edge-to-edge content just stretches into oversized
+  // cards and unreadably long lines — cap width and center, same fix every
+  // desktop-aware app makes, without touching any screen's own content.
+  const widthLimiter = isDesktop ? styles.desktopWidthLimiter : undefined;
 
   const content = scroll ? (
     <ScrollView
-      contentContainerStyle={[styles.scrollContent, contentStyle]}
+      contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop, contentStyle]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       refreshControl={
@@ -34,10 +42,12 @@ export function ScreenContainer({
         ) : undefined
       }
     >
-      {children}
+      <View style={widthLimiter}>{children}</View>
     </ScrollView>
   ) : (
-    <View style={[styles.flex, contentStyle]}>{children}</View>
+    <View style={[styles.flex, isDesktop && styles.centerRow]}>
+      <View style={[widthLimiter, styles.flex, contentStyle]}>{children}</View>
+    </View>
   );
 
   return (
@@ -53,4 +63,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xxl,
   },
+  scrollContentDesktop: {
+    paddingHorizontal: spacing.xl,
+    alignItems: "center",
+  },
+  centerRow: { alignItems: "center" },
+  desktopWidthLimiter: { width: "100%", maxWidth: contentMaxWidth },
 });
