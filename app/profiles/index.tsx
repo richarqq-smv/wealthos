@@ -200,7 +200,7 @@ export default function ProfilePickerScreen() {
             Je financiële gegevens blijven volledig behouden.
           </Text>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Nieuwe PIN</Text>
-          <PinInput value={newPin} onChange={(v) => { setNewPin(v); setSetupError(null); }} showKeypad={false} />
+          <PinInput value={newPin} onChange={(v) => { setNewPin(v); setSetupError(null); }} />
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.lg }]}>Bevestig PIN</Text>
           <PinInput
             value={confirmPin}

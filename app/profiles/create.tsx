@@ -65,7 +65,7 @@ export default function CreateProfileScreen() {
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.md }]}>
           Maak een 4-cijferige PIN
         </Text>
-        <PinInput value={pin} onChange={(v) => { setPin(v); setPinError(null); }} showKeypad={false} />
+        <PinInput value={pin} onChange={(v) => { setPin(v); setPinError(null); }} />
 
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.lg }]}>
           Bevestig PIN
