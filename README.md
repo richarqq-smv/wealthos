@@ -19,7 +19,7 @@ WealthOS is een persoonlijke tracker en geeft geen financieel advies. Het is gee
 - **Instellingen**: thema (licht/donker/systeem), valuta, privacy-modus, profielbeheer, JSON-export/import, demo-data reset.
 - **Demo-data**: 4 rekeningen, 8 beleggingen, 26 transacties, 6 budgetten, 1 schuld en 12 maanden vermogenshistorie — allemaal onderling consistent (assets − liabilities = net worth, exact). Demo-data gebruikt nooit live marktdata en werkt altijd, ook zonder API-key.
 - **Live marktdata (optioneel, sinds 0.2.0, met eerlijke live-status sinds 0.4.0 en correcte currency-conversie sinds 0.4.1)**: koersen, instrumentgrafieken (1D–MAX) en wisselkoersen — zie de sectie hieronder.
-- **273 unit tests** voor financiële berekeningen, FX-conversie, market-data caching, live/offline-statuslogica en provider-foutafhandeling (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key, quote-currency ≠ positie-currency).
+- **284 unit tests** voor financiële berekeningen, FX-conversie, market-data caching, live/offline-statuslogica, PIN-invoer en provider-foutafhandeling (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key, quote-currency ≠ positie-currency).
 
 ## Windows-desktopversie
 
@@ -45,7 +45,7 @@ Dit exporteert eerst de webbundel (`expo export -p web` → `dist/`) en verpakt 
 
 ### Installeren
 
-1. Dubbelklik `release\WealthOS Setup <versie>.exe` (bijv. `WealthOS Setup 0.4.2.exe`).
+1. Dubbelklik `release\WealthOS Setup <versie>.exe` (bijv. `WealthOS Setup 0.4.3.exe`).
 2. **Windows SmartScreen kan waarschuwen** ("Windows heeft je pc beschermd") — dit is normaal voor een app zonder betaald Authenticode-certificaat (~€300-500/jaar), niet een teken dat er iets mis is. Klik "Meer info" → "Toch uitvoeren".
 3. De installer is one-click: hij installeert direct naar `%LOCALAPPDATA%\Programs\WealthOS` en zet snelkoppelingen op het Bureaublad en in het Startmenu, zonder verdere vragen.
 4. Start WealthOS vanaf het Startmenu of Bureaublad zoals elk ander programma.
@@ -218,7 +218,7 @@ Een iOS-build vereist altijd signing (een Apple-ontwikkelaarsaccount); zonder Ma
 ## Testen en controleren
 
 ```bash
-npm test          # 273 unit tests: financiële berekeningen + market-data/FX/cache/live-status
+npm test          # 284 unit tests: financiële berekeningen + market-data/FX/cache/live-status/PIN
 npm run typecheck # strict TypeScript, geen `any`
 npx expo-doctor   # health-check van dependencies en configuratie
 ```
