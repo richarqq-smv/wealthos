@@ -52,3 +52,14 @@ coverage/
 
 # Electron desktop build output
 /release
+
+# Real broker export fixtures (own exports used for local/manual regression
+# testing) — these contain genuine personal financial data (name, address,
+# account number, real transactions/balances) and must never be committed.
+# Committed tests use the sanitized copies in */fixtures/**/sanitized/
+# instead — see tests/brokerImport/fixtures/revolut/README.md.
+tests/brokerImport/fixtures/revolut/*.csv
+tests/brokerImport/fixtures/revolut/*.pdf
+tests/brokerImport/fixtures/revolut/*.json
+!tests/brokerImport/fixtures/revolut/sanitized/
+!tests/brokerImport/fixtures/revolut/sanitized/**

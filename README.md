@@ -18,8 +18,9 @@ WealthOS is een persoonlijke tracker en geeft geen financieel advies. Het is gee
 - **Lokale profielen + PIN (sinds 0.3.0)**: meerdere personen kunnen dezelfde installatie gebruiken met volledig gescheiden data per profiel, elk met een eigen 4-cijferige PIN. De PIN wordt alleen als hash opgeslagen, in dezelfde versleutelde secure-storage als de marktdata-API-keys (nooit in platte tekst, nooit in de gewone app-data).
 - **Instellingen**: thema (licht/donker/systeem), valuta, privacy-modus, profielbeheer, JSON-export/import, demo-data reset.
 - **Demo-data**: 4 rekeningen, 8 beleggingen, 26 transacties, 6 budgetten, 1 schuld en 12 maanden vermogenshistorie — allemaal onderling consistent (assets − liabilities = net worth, exact). Demo-data gebruikt nooit live marktdata en werkt altijd, ook zonder API-key.
-- **Live marktdata (optioneel, sinds 0.2.0, met eerlijke live-status sinds 0.4.0 en correcte currency-conversie sinds 0.4.1)**: koersen, instrumentgrafieken (1D–MAX) en wisselkoersen — zie de sectie hieronder.
-- **284 unit tests** voor financiële berekeningen, FX-conversie, market-data caching, live/offline-statuslogica, PIN-invoer en provider-foutafhandeling (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key, quote-currency ≠ positie-currency).
+- **Live marktdata (optioneel, sinds 0.2.0, met eerlijke live-status sinds 0.4.0 en correcte currency-conversie sinds 0.4.1)**: koersen, instrumentgrafieken (1D–MAX) en wisselkoersen — zie de sectie hieronder. Sinds 0.5.0 ook een compact ververs-knopje met een geschat-daglimiet-teller op het dashboard.
+- **Beleggingen importeren vanuit je broker (sinds 0.5.0)**: volledige historische import (huidige én gesloten posities, dividenden, kosten, realistisch gerealiseerd resultaat) rechtstreeks vanuit Revolut-exportbestanden, broker-agnostisch opgezet zodat toekomstige brokers (DEGIRO-fundament al aanwezig) hetzelfde importscherm en dezelfde logica hergebruiken — zie de sectie hieronder.
+- **340 unit tests** voor financiële berekeningen, FX-conversie, market-data caching, live/offline-statuslogica, PIN-invoer, provider-foutafhandeling, en de broker-importpijplijn (parsing, reconciliatie, FIFO-fallback, deduplicatie, quota) (zie [TESTING.md](TESTING.md)), inclusief edge cases (nul, negatief, leeg, over-verkoop, offline, ongeldige API-key, quote-currency ≠ positie-currency).
 
 ## Windows-desktopversie
 
@@ -45,7 +46,7 @@ Dit exporteert eerst de webbundel (`expo export -p web` → `dist/`) en verpakt 
 
 ### Installeren
 
-1. Dubbelklik `release\WealthOS Setup <versie>.exe` (bijv. `WealthOS Setup 0.4.3.exe`).
+1. Dubbelklik `release\WealthOS Setup <versie>.exe` (bijv. `WealthOS Setup 0.5.0.exe`).
 2. **Windows SmartScreen kan waarschuwen** ("Windows heeft je pc beschermd") — dit is normaal voor een app zonder betaald Authenticode-certificaat (~€300-500/jaar), niet een teken dat er iets mis is. Klik "Meer info" → "Toch uitvoeren".
 3. De installer is one-click: hij installeert direct naar `%LOCALAPPDATA%\Programs\WealthOS` en zet snelkoppelingen op het Bureaublad en in het Startmenu, zonder verdere vragen.
 4. Start WealthOS vanaf het Startmenu of Bureaublad zoals elk ander programma.
@@ -120,6 +121,52 @@ Een koers komt soms in een andere valuta binnen dan de positie zelf is opgeslage
 ### Cache en offline-gedrag
 
 Elke koers, historische reeks, dividend- en bedrijfsprofiel wordt lokaal gecached, met de beurs-notering als onderdeel van de cache-sleutel (zodat bijvoorbeeld een Amerikaanse en een Europese notering van hetzelfde aandeel nooit door elkaar lopen). Is de provider tijdelijk onbereikbaar, geeft een ratelimit-fout, of is er geen internet: WealthOS toont de laatst bekende gecachte waarde met een duidelijk "Cache · bijgewerkt HH:MM"-label in plaats van een foutmelding of een crash.
+
+### Gratis-verversingen-teller
+
+Naast de bestaande ratelimit-backoff houdt WealthOS sinds 0.5.0 een eigen, lokaal-persistente teller bij van hoeveel keer de app zelf vandaag al een Twelve Data-verzoek deed (`lib/marketData/requestQuota.ts`), gereset bij elke UTC-dagwisseling. Dit is een **schatting op basis van WealthOS' eigen verzoeken**, geen door de provider bevestigde resterende limiet (die geeft Twelve Data's quote-endpoint niet terug) — de UI zegt dat ook expliciet ("~N gratis verversingen over vandaag"). Bij 0 resterend wordt het ververs-knopje uitgeschakeld én weigert de service-laag zelf het verzoek (dubbele borging, dus geen enkel aanroeppad kan de teller omzeilen).
+
+## Beleggingen importeren vanuit je broker (optioneel, sinds 0.5.0)
+
+Naast handmatige invoer kan WealthOS je volledige beleggingshistorie rechtstreeks importeren vanuit een broker-export — inclusief gesloten (volledig verkochte) posities, dividenden, kosten en (waar de broker dat zelf rapporteert) het daadwerkelijk gerealiseerde resultaat. Alles gebeurt **volledig lokaal**: bestanden worden nooit naar een externe dienst gestuurd, en er wordt **niets opgeslagen totdat je de preview expliciet bevestigt**.
+
+Bereikbaar via **Instellingen → Beleggingen importeren**.
+
+### Architectuur: één pijplijn, broker-specifieke adapters
+
+Elke broker implementeert een `BrokerAdapter` (`features/brokerImport/`) die bestanden herkent (op inhoud, nooit op bestandsnaam), parst en normaliseert naar één gedeeld transactiemodel. Alles daarna — kruisverwijzing tussen bestanden, instrumentherkenning, deduplicatie, preview, bevestiging en opslag — is broker-agnostisch en wordt door elke broker hergebruikt. Een `BrokerCapabilities`-vlaggenset per broker (bijv. "rapporteert deze broker zelf een gerealiseerd resultaat?") stuurt daarbinnen het gedrag, zodat een broker die dat niet doet nooit stilzwijgend een verzonnen cijfer krijgt.
+
+### Revolut (volledig ondersteund)
+
+Drie exportbestanden samen geven het volledige beeld — elk met zijn eigen rol, nooit door elkaar gebruikt:
+
+| Bestand | Rol |
+|---|---|
+| **Rekeningoverzicht (CSV of Excel)** | Exacte timestamps (tot op de seconde — nodig omdat sommige transacties binnen dezelfde seconde vallen) voor koop/verkoop/dividend, gebruikt voor deduplicatie |
+| **Rekeningoverzicht (PDF)** | Kosten, commissie, ISIN, huidige posities, en corporate actions (bijv. een spin-off) — deze staan **alleen** in dit bestand, nooit in de CSV |
+| **Winst- & verliesrekening (PDF)** | Revolut's eigen berekende gerealiseerd resultaat per verkochte positie (FIFO, inclusief correcte kostenverdeling wanneer één verkoop meerdere aankooppartijen sluit) en dividend bruto/bronbelasting/netto in de oorspronkelijke valuta |
+
+Revolut's eigen gerealiseerde-resultaatcijfer wordt **nooit** herberekend — WealthOS's bestaande gewogen-gemiddelde-model blijft uitsluitend voor handmatig ingevoerde posities gelden.
+
+### DEGIRO (architectuurfundament, nog niet productie-klaar)
+
+De adapterstructuur en de gedeelde FIFO-fallback-berekening (`features/brokerImport/fifoFallback.ts`, voor elke broker die zelf geen gerealiseerd resultaat rapporteert) staan klaar en zijn los getest. DEGIRO's eigen CSV-parser is bewust een no-op totdat een echt DEGIRO-exportbestand beschikbaar is om de kolomstructuur tegen te verifiëren — een gok naar een plausibel formaat zou een schijnbaar werkende maar mogelijk foutieve import opleveren, en dat risico neemt WealthOS niet. De importhub toont DEGIRO daarom als "Binnenkort".
+
+### Instrumentherkenning: ISIN eerst
+
+Een ticker alleen is aantoonbaar onveilig — Revolut's "SAP"-notering is bijvoorbeeld de Amerikaanse ADR (ISIN `US8030542042`), niet het Duitse Xetra-aandeel. WealthOS koppelt daarom altijd eerst op ISIN wanneer die bekend is (uit het bestand zelf, of een eerder geleerde ticker→ISIN-koppeling), en valt alleen op ticker+valuta terug wanneer geen ISIN bekend is — met een zichtbare waarschuwing in de preview.
+
+### Duplicaatdetectie en importgeschiedenis
+
+Elke transactie krijgt een samengestelde vingerafdruk (volledige timestamp + ISIN/ticker + type + aantal + prijs + valuta) die **blijvend** wordt opgeslagen — een bestand een tweede keer importeren voegt dus niets dubbel toe, ook niet in een latere sessie. Instellingen → Beleggingen importeren → Importgeschiedenis toont elke eerdere import (broker, datum, bestanden, aantallen, waarschuwingen).
+
+### Huidige versus historische posities
+
+Een volledig verkochte positie verdwijnt niet: de Beleggingen-tab toont "Huidige posities" en een inklapbare "Historische posities (gesloten)"-sectie apart, met per gesloten positie het (indien bekend) gerealiseerde resultaat in plaats van een misleidende €0,00-huidige-waarde.
+
+### Onbekende kostbasis: nooit stilzwijgend €0
+
+Een corporate action (bijv. een aandelen-spin-off) heeft geen aankoopprijs — WealthOS onthoudt dat expliciet (`costBasisKnown: false`) in plaats van een kostbasis van €0 te verzinnen, zowel in de preview (met waarschuwing) als in de opgeslagen transactie.
 
 ## Architectuur
 

@@ -12,6 +12,12 @@ export const StorageKeys = {
   portfolioSnapshots: `${NAMESPACE}:portfolioSnapshots`,
   settings: `${NAMESPACE}:settings`,
   bootstrapped: `${NAMESPACE}:bootstrapped`,
+  brokerImports: `${NAMESPACE}:brokerImports`,
+  /** Flat array of composite dedup fingerprints already persisted by a broker import — checked before writing any new imported transaction, so re-uploading the same export files a second time is a no-op. */
+  importedTransactionFingerprints: `${NAMESPACE}:importedTransactionFingerprints`,
+  marketDataQuota: `${NAMESPACE}:marketDataQuota`,
+  /** Learned ticker+currency -> ISIN mapping, built up from whichever imported rows do carry an ISIN, so later rows/imports that only have a ticker (e.g. Revolut's ledger CSV, which never carries ISIN) can still resolve to the same instrument. */
+  tickerIsinMap: `${NAMESPACE}:tickerIsinMap`,
 } as const;
 
 /**

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { AppHeader } from "@/components/AppHeader";
@@ -10,9 +10,11 @@ import { PortfolioChart } from "@/components/PortfolioChart";
 import { AllocationChart } from "@/components/AllocationChart";
 import { FilterChips } from "@/components/FilterChips";
 import { InvestmentCard } from "@/components/InvestmentCard";
+import { ClosedInvestmentRow } from "@/components/ClosedInvestmentRow";
 import { EmptyState } from "@/components/EmptyState";
 import { IconButton } from "@/components/IconButton";
 import { MarketDataStatusBar } from "@/components/MarketDataStatusBar";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing, typography } from "@/constants/theme";
 import { useInvestmentsStore } from "@/store/investmentsStore";
@@ -57,10 +59,12 @@ type SortKey = "value-desc" | "return-desc" | "return-asc" | "name-asc";
 export default function InvestmentsScreen() {
   const { colors } = useTheme();
   const investments = useInvestmentsStore((s) => s.investments);
+  const investmentTransactions = useInvestmentsStore((s) => s.investmentTransactions);
   const { snapshots } = usePortfolioSnapshots();
   const [period, setPeriod] = useState<PeriodKey>("3M");
   const [typeFilter, setTypeFilter] = useState<InvestmentType | "alle">("alle");
   const [sort, setSort] = useState<SortKey>("value-desc");
+  const [showClosed, setShowClosed] = useState(false);
 
   const portfolioValue = calculatePortfolioValue(investments);
   const investedCapital = calculateTotalInvestedCapital(investments);
@@ -77,12 +81,24 @@ export default function InvestmentsScreen() {
     return points;
   }, [snapshots, period, portfolioValue]);
 
+  const filteredByType = useMemo(
+    () => (typeFilter === "alle" ? investments : investments.filter((i) => i.type === typeFilter)),
+    [investments, typeFilter]
+  );
+
+  // A fully-sold position (quantity === 0, always live-derived, never trusted
+  // from Investment.closedAt alone — see types/models.ts) has nothing
+  // meaningful to rank by value or return%, so it's shown in its own
+  // "Historische posities" section instead of sinking to the bottom of the
+  // current-holdings list looking like a worthless open position.
+  const openInvestments = useMemo(() => filteredByType.filter((i) => i.quantity !== 0), [filteredByType]);
+  const closedInvestments = useMemo(
+    () => filteredByType.filter((i) => i.quantity === 0).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [filteredByType]
+  );
+
   const visibleInvestments = useMemo(() => {
-    let list = investments;
-    if (typeFilter !== "alle") {
-      list = list.filter((i) => i.type === typeFilter);
-    }
-    const withMetrics = list.map((investment) => {
+    const withMetrics = openInvestments.map((investment) => {
       const value = investment.quantity * investment.currentPriceMinor;
       const invested = investment.quantity * investment.averagePriceMinor;
       const pl = value - invested;
@@ -101,7 +117,7 @@ export default function InvestmentsScreen() {
       }
     });
     return withMetrics.map((w) => w.investment);
-  }, [investments, typeFilter, sort]);
+  }, [openInvestments, sort]);
 
   return (
     <ScreenContainer>
@@ -141,7 +157,7 @@ export default function InvestmentsScreen() {
         <FilterChips options={SORT_OPTIONS} value={sort} onChange={setSort} />
       </View>
 
-      {visibleInvestments.length === 0 ? (
+      {visibleInvestments.length === 0 && closedInvestments.length === 0 ? (
         <EmptyState
           icon="trending-up-outline"
           title="Nog geen beleggingen"
@@ -150,11 +166,44 @@ export default function InvestmentsScreen() {
           onAction={() => router.push("/investment/add")}
         />
       ) : (
-        <View style={styles.list}>
-          {visibleInvestments.map((investment) => (
-            <InvestmentCard key={investment.id} investment={investment} />
-          ))}
-        </View>
+        <>
+          {visibleInvestments.length > 0 ? (
+            <>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Huidige posities</Text>
+              <View style={styles.list}>
+                {visibleInvestments.map((investment) => (
+                  <InvestmentCard key={investment.id} investment={investment} />
+                ))}
+              </View>
+            </>
+          ) : (
+            <Text style={[typography.caption, { color: colors.textTertiary, marginBottom: spacing.md }]}>
+              Geen open posities — bekijk historische posities hieronder.
+            </Text>
+          )}
+
+          {closedInvestments.length > 0 ? (
+            <View style={styles.closedSection}>
+              <Pressable
+                onPress={() => setShowClosed((v) => !v)}
+                accessibilityRole="button"
+                style={styles.closedHeader}
+              >
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  Historische posities (gesloten) · {closedInvestments.length}
+                </Text>
+                <Ionicons name={showClosed ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+              </Pressable>
+              {showClosed ? (
+                <View style={styles.list}>
+                  {closedInvestments.map((investment) => (
+                    <ClosedInvestmentRow key={investment.id} investment={investment} transactions={investmentTransactions} />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </>
       )}
     </ScreenContainer>
   );
@@ -163,6 +212,8 @@ export default function InvestmentsScreen() {
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   summaryCard: { marginBottom: spacing.md },
+  closedSection: { marginTop: spacing.md },
+  closedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.xs },
   changeRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xxs },
   periodRow: { marginTop: spacing.md, marginBottom: spacing.xs },
   section: { marginBottom: spacing.md },

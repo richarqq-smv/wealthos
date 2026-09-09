@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Switch, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Stack } from "expo-router";
+import { router, Stack, type Href } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { Card } from "@/components/Card";
 import { TextField } from "@/components/form/TextField";
@@ -205,6 +205,9 @@ export default function MarketDataSettingsScreen() {
         <View style={[styles.row, { justifyContent: "space-between" }]}>
           <Text style={[typography.body, { color: colors.textPrimary }]}>Live marktdata inschakelen</Text>
           <Switch value={marketData.enabled} onValueChange={setMarketDataEnabled} trackColor={{ true: colors.accent }} />
+        </View>
+        <View style={{ marginTop: spacing.sm }}>
+          <SecondaryButton label="Hoe krijg ik een gratis API-key?" onPress={() => router.push("/guides/apiSetup" as Href)} />
         </View>
       </SectionCard>
 

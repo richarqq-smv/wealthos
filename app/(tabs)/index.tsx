@@ -14,7 +14,7 @@ import { InvestmentCard } from "@/components/InvestmentCard";
 import { TransactionRow } from "@/components/TransactionRow";
 import { EmptyState } from "@/components/EmptyState";
 import { SecondaryButton } from "@/components/SecondaryButton";
-import { LiveDataBadge } from "@/components/LiveDataBadge";
+import { LiveDataRefreshControl } from "@/components/LiveDataRefreshControl";
 import { useTheme } from "@/hooks/useTheme";
 import { spacing, typography } from "@/constants/theme";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
@@ -92,7 +92,7 @@ export default function DashboardScreen() {
         <View style={styles.netWorthHeaderRow}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Totaal vermogen</Text>
           {marketData.enabled ? (
-            <LiveDataBadge status={globalLiveStatus} timestamp={marketData.lastSuccessfulUpdate} errorKind={marketDataLastError} />
+            <LiveDataRefreshControl status={globalLiveStatus} timestamp={marketData.lastSuccessfulUpdate} errorKind={marketDataLastError} />
           ) : null}
         </View>
         <MoneyText minor={netWorthMinor} variant="display" style={{ marginTop: spacing.xxs }} />

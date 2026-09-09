@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack } from "expo-router";
+import { router, Stack, type Href } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { Card } from "@/components/Card";
 import { TextField } from "@/components/form/TextField";
@@ -102,7 +102,8 @@ export default function SettingsScreen() {
       </SectionCard>
 
       <SectionCard title="Data">
-        <NavRow row={{ icon: "server-outline", label: "Exporteren, importeren & reset", route: "/settings/data" }} isLast />
+        <NavRow row={{ icon: "server-outline", label: "Exporteren, importeren & reset", route: "/settings/data" }} isLast={false} />
+        <NavRow row={{ icon: "briefcase-outline", label: "Beleggingen importeren", route: "/import" as Href }} isLast />
       </SectionCard>
 
       <SectionCard title="Marktdata">
@@ -119,7 +120,7 @@ export default function SettingsScreen() {
 
       <SectionCard title="Over">
         <View style={styles.padded}>
-          <Text style={[typography.body, { color: colors.textPrimary }]}>WealthOS 0.4.3</Text>
+          <Text style={[typography.body, { color: colors.textPrimary }]}>WealthOS 0.5.0</Text>
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
             WealthOS is een persoonlijke financiële tracker en geeft geen financieel advies.
           </Text>

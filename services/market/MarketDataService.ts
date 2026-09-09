@@ -22,6 +22,7 @@ import {
 } from "@/lib/marketData/cachePolicy";
 import { API_KEY_STORAGE, RATE_LIMIT_BACKOFF_MS } from "@/lib/marketData/constants";
 import { convertAmountMinor } from "@/lib/marketData/currencyConversion";
+import { getQuotaStatus, recordMarketDataRequest } from "@/lib/marketData/requestQuota";
 import { TwelveDataProvider } from "./TwelveDataProvider";
 import { AlphaVantageProvider } from "./AlphaVantageProvider";
 
@@ -111,9 +112,16 @@ class MarketDataServiceImpl {
       // must be able to tell "rate limited" apart from "never configured".
       return { quote: cached ?? null, fromCache: true, error: "rateLimited", errorMessage: "Limiet bereikt, probeer later opnieuw." };
     }
+    if ((await getQuotaStatus()).exhausted) {
+      // Local, best-effort estimate against the documented free-tier limit —
+      // refused here too (not just disabled in the UI) so no refresh path
+      // can bypass the count. See lib/marketData/requestQuota.ts.
+      return { quote: cached ?? null, fromCache: true, error: "rateLimited", errorMessage: "Dagelijkse gratis limiet bereikt." };
+    }
 
     try {
       const quote = await TwelveDataProvider.getQuote!(investment.providerSymbol, assetType, apiKey, investment.exchange);
+      await recordMarketDataRequest();
       await MarketDataCacheRepository.setQuote(quote);
       return { quote, fromCache: false };
     } catch (error) {
@@ -163,9 +171,19 @@ class MarketDataServiceImpl {
         error: "rateLimited",
       };
     }
+    if ((await getQuotaStatus()).exhausted) {
+      return {
+        updated: 0,
+        quotes: [],
+        attempted,
+        failed: attempted.map((instrumentKey) => ({ instrumentKey, error: "rateLimited" as const })),
+        error: "rateLimited",
+      };
+    }
 
     try {
       const quotes = await TwelveDataProvider.getQuotesBatch!(toRefresh, apiKey);
+      await recordMarketDataRequest();
       for (const quote of quotes) {
         await MarketDataCacheRepository.setQuote(quote);
       }

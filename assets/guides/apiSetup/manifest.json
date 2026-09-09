@@ -1,0 +1,102 @@
+[
+  {
+    "step": 1,
+    "title": "Ga naar de website van TwelveData",
+    "file": "apisetup-01.png"
+  },
+  {
+    "step": 2,
+    "title": "Klik op Sign Up",
+    "file": "apisetup-02.png"
+  },
+  {
+    "step": 3,
+    "title": "Maak een account",
+    "file": "apisetup-03.png"
+  },
+  {
+    "step": 4,
+    "title": "Klik rechts op REVEAL bij de API key",
+    "file": "apisetup-04.png"
+  },
+  {
+    "step": 5,
+    "title": "Klik op het zwarte knopje en kopieer de key",
+    "file": "apisetup-05.png"
+  },
+  {
+    "step": 6,
+    "title": "Selecteer je gewenste account",
+    "file": "apisetup-06.png"
+  },
+  {
+    "step": 7,
+    "title": "Login met je pincode",
+    "file": "apisetup-07.png"
+  },
+  {
+    "step": 8,
+    "title": "Navigeer in de linker balk",
+    "file": "apisetup-08.png"
+  },
+  {
+    "step": 9,
+    "title": "Selecteer Meer",
+    "file": "apisetup-09.png"
+  },
+  {
+    "step": 10,
+    "title": "Selecteer Live Marketdata (deze staat als het goed is nog uit)",
+    "file": "apisetup-10.png"
+  },
+  {
+    "step": 11,
+    "title": "Zet het knopje om",
+    "file": "apisetup-11.png"
+  },
+  {
+    "step": 12,
+    "title": "Plak de API key in de balk voor Twelve Data en klik Opslaan",
+    "file": "apisetup-12.png"
+  },
+  {
+    "step": 13,
+    "title": "De API key is nu opgeslagen",
+    "file": "apisetup-13.png"
+  },
+  {
+    "step": 14,
+    "title": "Ga nu naar de website van Alpha Vantage",
+    "file": "apisetup-14.png"
+  },
+  {
+    "step": 15,
+    "title": "Selecteer de optie GET FREE API KEY",
+    "file": "apisetup-15.png"
+  },
+  {
+    "step": 16,
+    "title": "Selecteer Investor en vul je gegevens in",
+    "file": "apisetup-16.png"
+  },
+  {
+    "step": 17,
+    "title": "Klik nu op de knop GET FREE API KEY",
+    "file": "apisetup-17.png"
+  },
+  {
+    "step": 18,
+    "title": "Kopieer nu je API key handmatig",
+    "file": "apisetup-18.png"
+  },
+  {
+    "step": 19,
+    "title": "Plak de API key in de balk van Alpha Vantage en klik op opslaan",
+    "file": "apisetup-19.png"
+  },
+  {
+    "step": 20,
+    "title": "Klik nu bij beiden op Verbinding Testen en geniet van je live data",
+    "file": "apisetup-20.png"
+  }
+]

@@ -25,6 +25,8 @@ export interface Investment {
   name: string;
   ticker: string;
   type: InvestmentType;
+  /** ISIN, when known — the primary matching key for broker imports (ticker alone is provably ambiguous: e.g. Revolut's "SAP" ticker is the US ADR, ISIN US8030542042, not the Xetra share). Absent for manual entries and demo data. */
+  isin?: string;
   quantity: number;
   averagePriceMinor: number;
   currentPriceMinor: number;
@@ -41,9 +43,17 @@ export interface Investment {
   /** Set once the user links this position to live market data; absent = manual-only, never fetched. */
   liveDataEnabled?: boolean;
   priceUpdatedAt?: ISODateString;
+  /** Set when quantity reached 0 via a broker import — purely informational (the "closed" state is always derived live from quantity === 0, never trusted from this field alone). Absent for positions that were never fully sold. */
+  closedAt?: ISODateString;
 }
 
-export type InvestmentTransactionType = "buy" | "sell";
+export type InvestmentTransactionType = "buy" | "sell" | "dividend" | "fee" | "corporate_action";
+
+/** Which broker a transaction was imported from; absent for manual entries. */
+export type BrokerId = "revolut" | "degiro";
+
+/** Whether realized P&L for this transaction came straight from the broker's own report, or was computed by WealthOS (e.g. for brokers that don't provide FIFO P&L themselves). Never mix the two silently. */
+export type PnlSource = "broker-reported" | "wealthos-calculated";
 
 export interface InvestmentTransaction {
   id: string;
@@ -54,6 +64,29 @@ export interface InvestmentTransaction {
   date: ISODateString;
   note?: string;
   createdAt: ISODateString;
+
+  // --- Broker-import fields below: all optional, all absent on manual/demo entries ---
+  /** Transaction's own currency, when it can differ from the parent Investment's declared currency. Defaults to the parent Investment.currency when absent. */
+  currency?: CurrencyCode;
+  /** Pure execution value (price × quantity), before fees/commission — NOT the same as the cash amount that actually moved. */
+  grossAmountMinor?: number;
+  netAmountMinor?: number;
+  feesMinor?: number;
+  commissionMinor?: number;
+  withholdingTaxMinor?: number;
+  /** Only meaningful on "sell" rows that close (part of) a lot. */
+  realizedPnlMinor?: number;
+  costBasisMinor?: number;
+  /** Explicit false when a corporate action's cost basis genuinely isn't known (e.g. a spin-off) — never inferred as 0 by omission. Absent = not applicable (manual entries, buys). */
+  costBasisKnown?: boolean;
+  pnlSource?: PnlSource;
+  /** FX rate captured at the time of the transaction, if the broker reported one — used for point-in-time conversion, never overwritten by a later live rate lookup. */
+  fxRateAtTransaction?: number;
+  broker?: BrokerId;
+  sourceFile?: string;
+  sourceRowRef?: string;
+  /** Composite dedup key — see features/brokerImport/fingerprint.ts. Absent on manual entries. */
+  importFingerprint?: string;
 }
 
 export type TransactionType = "income" | "expense" | "transfer" | "investment";
@@ -190,4 +223,23 @@ export interface ExportPayload {
   budgets: Budget[];
   liabilities: Liability[];
   settings: Omit<Settings, "pinHash">;
+}
+
+/** One record per completed broker import — metadata only, never raw statement contents (see security notes in features/brokerImport). */
+export interface BrokerImportRecord {
+  id: string;
+  broker: BrokerId;
+  importedAt: ISODateString;
+  sourceFileNames: string[];
+  rowsScanned: number;
+  rowsImported: number;
+  rowsDuplicate: number;
+  warnings: string[];
+}
+
+/** Local, best-effort tracking of live-market-data request volume against the free-tier assumption WealthOS documents (Twelve Data Basic: 8/min, 800/day). Never claims to be the provider's own authoritative remaining quota. */
+export interface MarketDataQuota {
+  /** UTC calendar date (YYYY-MM-DD) this count applies to; a mismatch means the count resets to 0 before use. */
+  date: string;
+  requestsUsed: number;
 }
