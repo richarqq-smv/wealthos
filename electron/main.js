@@ -76,14 +76,31 @@ function attachRendererLogging(win) {
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, "renderer.log");
 
-  win.webContents.on("console-message", (event, level, message, line, sourceId) => {
+  win.webContents.on("console-message", (event) => {
+    // Electron's `console-message` event carries level/message/line/sourceId
+    // as properties on a single Event object, not as separate positional
+    // arguments — a 5-arg `(event, level, message, line, sourceId)` listener
+    // silently receives `level=undefined` here and never actually logs.
+    const { level, message, lineNumber, sourceId } = event;
     if (level < 1) return; // 0 = verbose/log, skip — only warnings (1) and errors (2)
-    const entry = `[${new Date().toISOString()}] ${CONSOLE_LEVELS[level] ?? level}: ${message} (${sourceId}:${line})\n`;
+    const entry = `[${new Date().toISOString()}] ${CONSOLE_LEVELS[level] ?? level}: ${message} (${sourceId}:${lineNumber})\n`;
     fs.appendFile(logPath, entry, () => {});
   });
 
   win.webContents.on("render-process-gone", (event, details) => {
     fs.appendFile(logPath, `[${new Date().toISOString()}] render-process-gone: ${details.reason}\n`, () => {});
+  });
+
+  // A silent preload failure or a failed initial page load would otherwise
+  // leave the renderer running with no bridge to the main process and no
+  // trace of why — these two are worth keeping permanently, unlike the
+  // request-level tracing used during this investigation.
+  win.webContents.on("preload-error", (event, preloadPath, error) => {
+    fs.appendFile(logPath, `[${new Date().toISOString()}] preload-error at ${preloadPath}: ${error?.stack || error}\n`, () => {});
+  });
+
+  win.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    fs.appendFile(logPath, `[${new Date().toISOString()}] did-fail-load code=${errorCode} desc=${errorDescription} url=${validatedURL}\n`, () => {});
   });
 }
 
@@ -234,26 +251,41 @@ function attachDownloadHandler(win) {
   });
 }
 
-app.whenReady().then(() => {
-  if (!isDev) {
-    registerAppProtocol();
-  }
+/**
+ * `app.quit()` (called above when `gotLock` is false) does NOT synchronously
+ * prevent an already-in-flight `app.whenReady()` promise from resolving —
+ * Electron resolves it once the engine itself is ready, independent of a
+ * pending quit. A losing instance whose `.then()` callback isn't gated on
+ * `gotLock` will still create a full second window and its own renderer,
+ * which reads/writes the exact same userData/localStorage as the winning
+ * instance — not a different storage location, but a second, spurious
+ * window whose own fresh render can visibly race the real one (e.g. showing
+ * an empty profile list for a moment) while the winning instance's
+ * `second-instance` handler is trying to refocus the real one. Everything
+ * below must only ever run in the process that actually holds the lock.
+ */
+if (gotLock) {
+  app.whenReady().then(() => {
+    if (!isDev) {
+      registerAppProtocol();
+    }
 
-  registerSecureStorageHandlers();
+    registerSecureStorageHandlers();
 
-  const startUrl = isDev ? process.env.ELECTRON_START_URL : APP_ORIGIN;
-  const win = createWindow(startUrl);
-  attachDownloadHandler(win);
+    const startUrl = isDev ? process.env.ELECTRON_START_URL : APP_ORIGIN;
+    const win = createWindow(startUrl);
+    attachDownloadHandler(win);
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(startUrl);
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow(startUrl);
+      }
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
     }
   });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+}

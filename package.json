@@ -1,6 +1,6 @@
 {
   "name": "wealthos",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "WealthOS — local-first personal finance desktop app with optional free live market data",
   "author": "WealthOS",
   "main": "expo-router/entry",
